@@ -9,6 +9,11 @@ body {
 
 #app {
   height: 100%;
+  display: flex;
+}
+
+#canvas {
+  flex-grow: 1;
 }
 
 #deviceData {

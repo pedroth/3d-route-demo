@@ -493,12 +493,12 @@ function init() {
 
     //add device accelerometer  callback ?
     if (window.DeviceMotionEvent != undefined && isMobile) {
-        window.ondevicemotion = e => {
+        window.addEventListener('devicemotion', e => {
             accelerationFifo.push([-e.acceleration.y, -e.acceleration.x, -e.acceleration.z]);
             document.getElementById("accelerationX").innerHTML = accelerationFifo.buffer[accelerationFifo.buffer.length - 1][0];
             document.getElementById("accelerationY").innerHTML = accelerationFifo.buffer[accelerationFifo.buffer.length - 1][1];
             document.getElementById("accelerationZ").innerHTML = accelerationFifo.buffer[accelerationFifo.buffer.length - 1][2];
-        };
+        }, true);
 
         window.addEventListener('deviceorientation', e => {
             let euler = [Math.round(e.alpha), Math.round(e.beta), Math.round(e.gamma)];
