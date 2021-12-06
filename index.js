@@ -210,8 +210,8 @@ let Device = function () {
     this.eulerSpeed = [0, 0, 0];
     this.basis = [];
     this.computeBasisFromEuler = function () {
-        let alpha = -this.euler[0];
-        let beta = this.euler[1];
+        let alpha = this.euler[0];
+        let beta = -this.euler[1];
         let gamma = this.euler[2];
         let ca = Math.cos(alpha);
         let sa = Math.sin(alpha);
@@ -220,10 +220,12 @@ let Device = function () {
         let cg = Math.cos(gamma);
         let sg = Math.sin(gamma);
 
-        // Ry(alpha)* Rx(beta) * Rz(gamma), where Rx is the x-axis rotation matrix
-        this.basis[0] = [ca * cg + sa * sb * sg, cb * sg, ca * sb * sg - sa * cg];
-        this.basis[1] = [sa * sb * cg - ca * sg, cb * cg, sa * sg + ca * sb * cg];
-        this.basis[2] = [sa * cb, -sb, ca * cb];
+        // Rz(alpha) * Rx(-beta) * Ry(gamma), where Rx is the x-axis rotation matrix
+        // https://en.wikipedia.org/wiki/Euler_angles#Rotation_matrix
+        //https://developers.google.com/web/fundamentals/native-hardware/device-orientation
+        this.basis[0] = [ca * cg - sa * sb * sg, cg * sa + ca * sb * sg, -cb * sg];
+        this.basis[1] = [-cb * sa, ca * cb, sb];
+        this.basis[2] = [ca * sg + cg * sa * sb, sa * sg - ca * cg * sb, cb * cg];
     }
 }
 
@@ -518,21 +520,18 @@ function init() {
 
 function keyDown(e) {
     isManual = true;
-    switch (e.keyCode) {
-        case 65:
+    switch (e.key) {
+        case "a":
             eulerFifo.push(add(averageVectorFifo(eulerFifo), [-0.1, 0, 0]));
             break;
-        case 87:
-            eulerFifo.push(add(averageVectorFifo(eulerFifo), [0, 0.1, 0]));
-            break;
-        case 68:
+        case "d":
             eulerFifo.push(add(averageVectorFifo(eulerFifo), [0.1, 0, 0]));
             break;
-        case 81:
-            eulerFifo.push(add(averageVectorFifo(eulerFifo), [0, 0, 0.1]));
+        case "w":
+            eulerFifo.push(add(averageVectorFifo(eulerFifo), [0, 0.1, 0]));
             break;
-        case 69:
-            eulerFifo.push(add(averageVectorFifo(eulerFifo), [0, 0, -0.1]));
+        case "s":
+            eulerFifo.push(add(averageVectorFifo(eulerFifo), [0, -0.1, 0]));
             break;
     }
 }
