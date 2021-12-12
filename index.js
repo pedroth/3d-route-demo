@@ -29,6 +29,7 @@ const isMobile =
   /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
     navigator.userAgent
   );
+let isWheelUsed = false;
 
 //error correcting variables
 let samples = 20;
@@ -95,6 +96,7 @@ function init() {
   canvas.addEventListener("mousedown", mouseDown, false);
   canvas.addEventListener("mouseup", mouseUp, false);
   canvas.addEventListener("mousemove", mouseMove, false);
+  canvas.addEventListener("wheel", mouseWheel, false);
 
   document.addEventListener("keydown", keyDown, false);
 
@@ -146,18 +148,19 @@ function init() {
 
 function keyDown(e) {
   isManual = true;
+  const keySpeed = 0.25;
   switch (e.key) {
     case "a":
-      eulerFifo.push(averageVectorFifo(eulerFifo).add(Vec3(-0.1, 0, 0)));
+      eulerFifo.push(averageVectorFifo(eulerFifo).add(Vec3(-keySpeed, 0, 0)));
       break;
     case "d":
-      eulerFifo.push(averageVectorFifo(eulerFifo).add(Vec3(0.1, 0, 0)));
+      eulerFifo.push(averageVectorFifo(eulerFifo).add(Vec3(keySpeed, 0, 0)));
       break;
     case "w":
-      eulerFifo.push(averageVectorFifo(eulerFifo).add(Vec3(0, 0.1, 0)));
+      eulerFifo.push(averageVectorFifo(eulerFifo).add(Vec3(0, keySpeed, 0)));
       break;
     case "s":
-      eulerFifo.push(averageVectorFifo(eulerFifo).add(Vec3(0, -0.1, 0)));
+      eulerFifo.push(averageVectorFifo(eulerFifo).add(Vec3(0, -keySpeed, 0)));
       break;
   }
 }
@@ -224,6 +227,11 @@ function mouseMove(e) {
     )
   );
   mouse = newMouse;
+}
+
+function mouseWheel(e) {
+  camera.param = camera.param.add(Vec3(e.deltaY * 0.01, 0, 0));
+  isWheelUsed = true;
 }
 
 function averageVectorFifo(fifo) {
@@ -295,7 +303,9 @@ function updateCurve(dt) {
   maxCurve = maxCurve.op(myDevice.pos, (a, b) => Math.max(a, b));
   const center = minCurve.add(maxCurve).scale(0.5);
   const radius = maxCurve.sub(center).length();
-  camera.param = Vec3(radius, ...camera.param.take(1, 3).toArray());
+  if (!isWheelUsed) {
+    camera.param = Vec3(radius, ...camera.param.take(1, 3).toArray());
+  }
 }
 
 function drawAxis() {
@@ -339,10 +349,12 @@ function drawDevice() {
   }
 }
 function drawCurve() {
+  const K = 500;
+  const n = curve.length;
   scene.addElement(
     Scene.Path.builder()
       .name("devicePath")
-      .path(curve)
+      .path(n > K ? curve.filter((_, i) => i > n - K) : curve)
       .color([0, 255, 0, 255])
       .build()
   );
@@ -426,7 +438,6 @@ function draw() {
   if (isCalibrating && isMobile) {
     calibration(dt, data);
   } else {
-    scene.clear();
     camera.orbit();
     updateCurve(dt);
     drawDevice();

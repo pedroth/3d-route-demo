@@ -81,7 +81,7 @@ export default class Camera {
 function intersectImagePlaneInCameraSpace(vertexOut, vertexIn, camera) {
   const { distanceToPlane } = camera;
   const v = vertexOut.sub(vertexIn);
-  const alpha = (distanceToPlane - outZ) / v.get(2);
+  const alpha = (distanceToPlane - vertexOut.get(2)) / v.get(2);
   const p = vertexOut.add(v.scale(alpha));
   return p.toArray();
 }
