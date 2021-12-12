@@ -1,532 +1,91 @@
-/*
-Canvas coordinates
-0            W
-+-------------> y
-|      
-|      
-|       *
-|
-|
-v x
-
-H
-*/
 /**
  * Setup
  */
+import Camera from "./src/Camera.js";
+import Canvas from "./src/Canvas.js";
+import Scene from "./src/Scene.js";
+import {
+  Device,
+  dirac,
+  matrixProd,
+  matrixTransposeProd,
+  Fifo,
+  LoadingBar,
+} from "./src/Utils.js";
+import Vec, { Vec2, Vec3 } from "./src/Vec3.js";
 
-//drawing letiables
+//drawing variables
 let canvas = document.getElementById("canvas");
 let ctx = canvas.getContext("2d");
+let tela = new Canvas(canvas);
+let scene = new Scene();
+let camera = new Camera();
+
+// ui variables
 let down = false;
+let mouse = Vec2();
+let isManual = false;
+const isMobile =
+  /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+    navigator.userAgent
+  );
+let isWheelUsed = false;
 
-let startTime;
-let mouse;
-let time = 0;
-
-let alpha = Math.PI / 4;
-let distanceToPlane = 1;
-
-let xmin, xmax;
-
-//error correcting letiables
-let accelerationFifo;
-let eulerFifo;
+//error correcting variables
 let samples = 20;
+let accelerationFifo = new Fifo(samples);
+let eulerFifo = new Fifo(samples);
 
-// calibration letiables
-let accelerationCalibration = [0, 0, 0];
-let eulerCalibration = [0, 0, 0];
+// calibration variables
+let accelerationCalibration = Vec3();
+let eulerCalibration = Vec3();
 let calibrationIte = 1;
 let isCalibrating = true;
 let maxCalibrationTimeInSeconds = 10;
 let calibrationLoadingUI;
 
-//curve letiables
-let curve = [];
-let minCurve = [-3, -3, -3];
-let maxCurve = [3, 3, 3];
-let cam;
-let myDevice;
-
-let isManual = false;
-
-let isMobile =
-  /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
-    navigator.userAgent
-  );
-
-/**
- * My math
- **/
-function clamp(x, xmin, xmax) {
-  return Math.max(xmin, Math.min(xmax, x));
-}
-
-function floor(x) {
-  x[0] = Math.floor(x[0]);
-  x[1] = Math.floor(x[1]);
-  return x;
-}
-/*
- * 3D vectors
- */
-function vec3(x, y, z) {
-  let ans = [];
-  ans[0] = x;
-  ans[1] = y;
-  ans[2] = z;
-  return ans;
-}
-
-let add = function (u, v) {
-  let ans = [];
-  ans[0] = u[0] + v[0];
-  ans[1] = u[1] + v[1];
-  ans[2] = u[2] + v[2];
-  return ans;
-};
-
-let diff = function (u, v) {
-  let ans = [];
-  ans[0] = u[0] - v[0];
-  ans[1] = u[1] - v[1];
-  ans[2] = u[2] - v[2];
-  return ans;
-};
-
-let scalarMult = function (s, v) {
-  let ans = [];
-  ans[0] = s * v[0];
-  ans[1] = s * v[1];
-  ans[2] = s * v[2];
-  return ans;
-};
-
-let squaredNorm = function (v) {
-  return v[0] * v[0] + v[1] * v[1] + v[2] * v[2];
-};
-
-let myNorm = function (v) {
-  return Math.sqrt(squaredNorm(v));
-};
-
-let normalize = function (v) {
-  if (v[0] !== 0.0 && v[1] !== 0.0 && v[2] !== 0.0) {
-    return scalarMult(1 / myNorm(v), v);
-  } else {
-    return v;
-  }
-};
-
-let binaryOperation = (u, v, operation) => {
-  if (u.length != v.length)
-    throw `arrays dimension mismatch ${u.length}, ${v.length}`;
-  let ans = [];
-  for (let i = 0; i < u.length; i++) {
-    ans.push(operation(u[i], v[i]));
-  }
-  return ans;
-};
-
-let innerProd = function (u, v) {
-  return u[0] * v[0] + u[1] * v[1] + u[2] * v[2];
-};
-/**
- * return product between the matrix formed by (u,v,w) and x;
- * */
-let matrixProd = function (u, v, w, x) {
-  return add(
-    add(scalarMult(x[0], u), scalarMult(x[1], v)),
-    scalarMult(x[2], w)
-  );
-};
-
-/**
- * Return the product between the matrix formed by (u,v,w).T and x;
- * @param {*} u
- * @param {*} v
- * @param {*} w
- * @param {*} x
- */
-let matrixProdTranspose = function (u, v, w, x) {
-  return [innerProd(u, x), innerProd(v, x), innerProd(w, x)];
-};
-
-/**
- * return solution to : [ u_0 , h] x = z_0
- *
- *					   [ u_1,  0] y = z_1
- */
-function solve2by2UpperTriMatrix(u, h, z) {
-  let aux = z[1] / u[1];
-  return [aux, (-u[0] * aux + z[0]) / h];
-}
-/**
- * return solution to : [ u_0 , 0] x = z_0
- *
- *					   [ u_1,  w] y = z_1
- */
-function solve2by2LowerTriMatrix(u, w, z) {
-  let aux = z[0] / u[0];
-  return [aux, (-u[1] * aux + z[1]) / w];
-}
-
-/**
- *  Utils
- **/
-let Camera = function () {
-  this.basis = [];
-  this.invBasis = [];
-  /**
-   * 0 - rho
-   * 1 - theta
-   * 2 - phi
-   */
-  this.param = [0, 0, 0];
-  this.eye = [];
-  this.focalPoint = [];
-
-  this.orbit = function () {
-    this.basis = [];
-    let cosP = Math.cos(this.param[2]);
-    let cosT = Math.cos(this.param[1]);
-    let sinP = Math.sin(this.param[2]);
-    let sinT = Math.sin(this.param[1]);
-
-    // z - axis
-    this.basis[2] = [-cosP * cosT, -cosP * sinT, -sinP];
-    // y - axis
-    this.basis[1] = [-sinP * cosT, -sinP * sinT, cosP];
-    // x -axis
-    this.basis[0] = [-sinT, cosT, 0];
-
-    this.invBasis[0] = [this.basis[0][0], this.basis[1][0], this.basis[2][0]];
-    this.invBasis[1] = [this.basis[0][1], this.basis[1][1], this.basis[2][1]];
-    this.invBasis[2] = [this.basis[0][2], this.basis[1][2], this.basis[2][2]];
-
-    this.eye = [
-      this.param[0] * cosP * cosT + this.focalPoint[0],
-      this.param[0] * cosP * sinT + this.focalPoint[1],
-      this.param[0] * sinP + this.focalPoint[2],
-    ];
-  };
-};
-
-let Device = function () {
-  this.pos = [0, 0, 0];
-  this.vel = [0, 0, 0];
-  this.euler = [0, 0, 0];
-  this.eulerSpeed = [0, 0, 0];
-  this.basis = [];
-  this.computeBasisFromEuler = function () {
-    let alpha = this.euler[0];
-    let beta = -this.euler[1];
-    let gamma = this.euler[2];
-    let ca = Math.cos(alpha);
-    let sa = Math.sin(alpha);
-    let cb = Math.cos(beta);
-    let sb = Math.sin(beta);
-    let cg = Math.cos(gamma);
-    let sg = Math.sin(gamma);
-
-    // Rz(alpha) * Rx(-beta) * Ry(gamma), where Rx is the x-axis rotation matrix
-    // https://en.wikipedia.org/wiki/Euler_angles#Rotation_matrix
-    //https://developers.google.com/web/fundamentals/native-hardware/device-orientation
-    this.basis[0] = [ca * cg - sa * sb * sg, cg * sa + ca * sb * sg, -cb * sg];
-    this.basis[1] = [-cb * sa, ca * cb, sb];
-    this.basis[2] = [ca * sg + cg * sa * sb, sa * sg - ca * cg * sb, cb * cg];
-  };
-};
-
-let Fifo = function (n) {
-  this.index = 0;
-  this.maxSize = n;
-  this.buffer = [];
-
-  this.push = function (x) {
-    this.buffer[this.index] = x;
-    this.index = (this.index + 1) % this.maxSize;
-  };
-};
-
-let LoadingBar = function (pos, size) {
-  this.pos = pos;
-  this.size = size;
-  this.percentFill = 0;
-};
-
-function getImageIndex(x, size) {
-  return 4 * (size[0] * x[0] + x[1]);
-}
-
-function canvasTransformInt(x, xmin, xmax) {
-  const { width, height } = canvas;
-  let xint = (-height / (xmax[1] - xmin[1])) * (x[1] - xmax[1]);
-  let yint = (width / (xmax[0] - xmin[0])) * (x[0] - xmin[0]);
-  return [xint, yint];
-}
-
-function canvasTransform(xInt, xmin, xmax) {
-  const { width, height } = canvas;
-  let xt = xmin[0] + ((xmax[0] - xmin[0]) / width) * xInt[1];
-  let yt = xmax[1] - ((xmax[1] - xmin[1]) / height) * xInt[0];
-  return [xt, yt];
-}
-
-/**
- * x is a vector
- * size is a vector where x-coord is width and y-coord is height
- */
-function getPxlData(x, data, size) {
-  let rgba = [];
-  let index = getImageIndex(x, size);
-  rgba[0] = data[index];
-  rgba[1] = data[index + 1];
-  rgba[2] = data[index + 2];
-  rgba[3] = data[index + 3];
-  return rgba;
-}
-
-function drawPxl(x, data, rgb) {
-  const { width, height } = canvas;
-  let size = [width, height];
-  let index = getImageIndex(x, size);
-  data[index] = rgb[0];
-  data[index + 1] = rgb[1];
-  data[index + 2] = rgb[2];
-  data[index + 3] = rgb[3];
-}
-
-function drawLineIntClipped(x1, x2, rgb, data) {
-  x1 = floor(x1);
-  x2 = floor(x2);
-
-  let index = [-1, 0, 1];
-
-  let n = index.length;
-  let nn = n * n;
-
-  let x = [];
-  x[0] = x1[0];
-  x[1] = x1[1];
-
-  let tangent = [x2[0] - x1[0], x2[1] - x1[1]];
-  let normal = [];
-  normal[0] = -tangent[1];
-  normal[1] = tangent[0];
-
-  drawPxl(x, data, rgb);
-
-  while (x[0] !== x2[0] || x[1] !== x2[1]) {
-    let fmin = Number.MAX_VALUE;
-    let minDir = [];
-    for (let k = 0; k < nn; k++) {
-      let i = index[k % n];
-      let j = index[Math.floor((k % nn) / n)];
-
-      let nextX = [x[0] + i, x[1] + j];
-
-      let v = [nextX[0] - x1[0], nextX[1] - x1[1]];
-      let f =
-        Math.abs(v[0] * normal[0] + v[1] * normal[1]) -
-        (v[0] * tangent[0] + v[1] * tangent[1]);
-      if (fmin > f) {
-        fmin = f;
-        minDir = [i, j];
-      }
-    }
-
-    x = [x[0] + minDir[0], x[1] + minDir[1]];
-    drawPxl(x, data, rgb);
-  }
-}
-
-function drawLineInt(x1, x2, rgb, data) {
-  // do clipping
-  let stack = [];
-  stack.push(x1);
-  stack.push(x2);
-  let inStack = [];
-  let outStack = [];
-  for (let i = 0; i < stack.length; i++) {
-    let x = stack[i];
-    if (
-      0 <= x[0] &&
-      x[0] <= canvas.height &&
-      0 <= x[1] &&
-      x[1] <= canvas.width
-    ) {
-      inStack.push(x);
-    } else {
-      outStack.push(x);
-    }
-  }
-  // both points are inside canvas
-  if (inStack.length == 2) {
-    drawLineIntClipped(inStack[0], inStack[1], rgb, data);
-    return;
-  }
-  //intersecting line with canvas
-  let intersectionSolutions = [];
-  let v = [x2[0] - x1[0], x2[1] - x1[1]];
-  // Let s \in [0,1]
-  // line intersection with [0, 0]^T + [H, 0]^T s
-  intersectionSolutions.push(
-    solve2by2UpperTriMatrix(v, -canvas.height, [-x1[0], -x1[1]])
-  );
-  // line intersection with [H, 0]^T + [0, W]^T s
-  intersectionSolutions.push(
-    solve2by2LowerTriMatrix(v, -canvas.width, [canvas.height - x1[0], -x1[1]])
-  );
-  // line intersection with [H, W]^T + [-H, 0]^T s
-  intersectionSolutions.push(
-    solve2by2UpperTriMatrix(v, canvas.height, [
-      canvas.height - x1[0],
-      canvas.width - x1[1],
-    ])
-  );
-  // line intersection with [0, W]^T + [0, -W]^T s
-  intersectionSolutions.push(
-    solve2by2LowerTriMatrix(v, canvas.width, [-x1[0], canvas.width - x1[1]])
-  );
-
-  let validIntersection = [];
-  for (let i = 0; i < intersectionSolutions.length; i++) {
-    let x = intersectionSolutions[i];
-    if (0 <= x[0] && x[0] <= 1 && 0 <= x[1] && x[1] <= 1) {
-      validIntersection.push(x);
-    }
-    if (validIntersection.length == 2) {
-      let p1 = [
-        x1[0] + validIntersection[0][0] * v[0],
-        x1[1] + validIntersection[0][0] * v[1],
-      ];
-      let p2 = [
-        x1[0] + validIntersection[1][0] * v[0],
-        x1[1] + validIntersection[1][0] * v[1],
-      ];
-      return drawLineIntClipped(p1, p2, rgb, data);
-    }
-  }
-  if (validIntersection.length == 0) {
-    return;
-  }
-  //it can be shown that at this point there is only one valid intersection
-  let p = [
-    x1[0] + validIntersection[0][0] * v[0],
-    x1[1] + validIntersection[0][0] * v[1],
-  ];
-  drawLineIntClipped(inStack.pop(), p, rgb, data);
-}
-
-function drawLine(x1, x2, rgb, data) {
-  let x1Int = canvasTransformInt(x1, xmin, xmax);
-  let x2Int = canvasTransformInt(x2, xmin, xmax);
-  drawLineInt(x1Int, x2Int, rgb, data);
-}
-
-function intersectImagePlaneInCameraSpace(vertexOut, vertexIn) {
-  let outX = vertexOut[0];
-  let outY = vertexOut[1];
-  let outZ = vertexOut[2];
-  let inZ = vertexIn[2];
-  let xInter =
-    outX + ((vertexIn[0] - outX) * (distanceToPlane - outZ)) / (inZ - outZ);
-  let yInter =
-    outY + ((vertexIn[1] - outY) * (distanceToPlane - outZ)) / (inZ - outZ);
-  return [xInter, yInter, distanceToPlane];
-}
-
-function draw3DLine(line, rgb, data) {
-  // camera coords
-  let cameraLine = [];
-  cameraLine[0] = matrixProd(
-    cam.invBasis[0],
-    cam.invBasis[1],
-    cam.invBasis[2],
-    diff(line[0], cam.eye)
-  );
-  cameraLine[1] = matrixProd(
-    cam.invBasis[0],
-    cam.invBasis[1],
-    cam.invBasis[2],
-    diff(line[1], cam.eye)
-  );
-
-  //frustum culling
-  let inFrustum = [];
-  let outFrustum = [];
-  for (let i = 0; i < cameraLine.length; i++) {
-    if (cameraLine[i][2] < distanceToPlane) {
-      outFrustum.push(i);
-    } else {
-      inFrustum.push(i);
-    }
-  }
-  if (outFrustum.length == 2) {
-    return;
-  }
-  if (outFrustum.length == 1) {
-    let inVertex = inFrustum[0];
-    let outVertex = outFrustum[0];
-    let inter = intersectImagePlaneInCameraSpace(
-      cameraLine[outVertex],
-      cameraLine[inVertex]
-    );
-    cameraLine[outVertex] = inter;
-  }
-
-  //project
-  for (let i = 0; i < cameraLine.length; i++) {
-    cameraLine[i][0] = (cameraLine[i][0] * distanceToPlane) / cameraLine[i][2];
-    cameraLine[i][1] = (cameraLine[i][1] * distanceToPlane) / cameraLine[i][2];
-  }
-  drawLine(
-    [cameraLine[0][0], cameraLine[0][1]],
-    [cameraLine[1][0], cameraLine[1][1]],
-    rgb,
-    data
-  );
-}
+//app variables
+let startTime = new Date().getTime();
+let time = 0;
+const curve = [];
+let minCurve = Vec3(-3, -3, -3);
+let maxCurve = Vec3(3, 3, 3);
+let myDevice = new Device();
+let cube = [
+  Vec3(0, 0, 0),
+  Vec3(1, 0, 0),
+  Vec3(0, 1, 0),
+  Vec3(1, 1, 0),
+  Vec3(0, 0, 1),
+  Vec3(1, 0, 1),
+  Vec3(0, 1, 1),
+  Vec3(1, 1, 1),
+].map((p) => p.mul(Vec3(0.618033, 1, 0.1)));
+const centerCube = averageVector(...cube);
+cube = cube.map((p) => p.sub(centerCube));
+const linesIndexs = [
+  [0, 1],
+  [0, 2],
+  [0, 4],
+  [1, 3],
+  [1, 5],
+  [2, 3],
+  [2, 6],
+  [3, 7],
+  [4, 5],
+  [4, 6],
+  [5, 7],
+  [6, 7],
+];
 
 /**
  * Main program
  */
 
-function preventScrollingMobile() {
-  document.body.addEventListener(
-    "touchstart",
-    function (e) {
-      if (e.target == canvas) {
-        e.preventDefault();
-      }
-    },
-    false
-  );
-  document.body.addEventListener(
-    "touchend",
-    function (e) {
-      if (e.target == canvas) {
-        e.preventDefault();
-      }
-    },
-    false
-  );
-  document.body.addEventListener(
-    "touchmove",
-    function (e) {
-      if (e.target == canvas) {
-        e.preventDefault();
-      }
-    },
-    false
-  );
-}
-
 function resize() {
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight;
+  tela = new Canvas(canvas);
 }
 
 function init() {
@@ -537,33 +96,16 @@ function init() {
   canvas.addEventListener("mousedown", mouseDown, false);
   canvas.addEventListener("mouseup", mouseUp, false);
   canvas.addEventListener("mousemove", mouseMove, false);
+  canvas.addEventListener("wheel", mouseWheel, false);
 
   document.addEventListener("keydown", keyDown, false);
 
   window.addEventListener("resize", resize);
   resize();
 
-  startTime = new Date().getTime();
-
-  let size = distanceToPlane * Math.tan(alpha);
-  xmin = [-size, -size];
-  xmax = [size, size];
-
-  mouse = [0, 0];
-
-  cam = new Camera();
-  cam.param = [3, Math.PI + Math.PI / 3, Math.PI / 3];
-  cam.focalPoint = [0, 0, 0];
-  cam.eye = [3, 0, 0];
-
-  myDevice = new Device();
-
-  accelerationFifo = new Fifo(samples);
-  eulerFifo = new Fifo(samples);
-
   calibrationLoadingUI = new LoadingBar(
-    [canvas.width / 4, canvas.height / 3],
-    [canvas.width / 2, 25]
+    Vec2(canvas.width / 4, canvas.height / 3),
+    Vec2(canvas.width / 2, 25)
   );
 
   //add device accelerometer  callback ?
@@ -571,66 +113,62 @@ function init() {
     window.addEventListener(
       "devicemotion",
       (e) => {
-        accelerationFifo.push([
-          -e.acceleration.y,
-          -e.acceleration.x,
-          -e.acceleration.z,
-        ]);
+        accelerationFifo.push(
+          Vec3(-e.acceleration.y, -e.acceleration.x, -e.acceleration.z)
+        );
+        const lastAcceleration =
+          accelerationFifo.buffer[accelerationFifo.buffer.length - 1].toArray();
         document.getElementById("accelerationX").innerHTML =
-          accelerationFifo.buffer[accelerationFifo.buffer.length - 1][0];
+          lastAcceleration[0];
         document.getElementById("accelerationY").innerHTML =
-          accelerationFifo.buffer[accelerationFifo.buffer.length - 1][1];
+          lastAcceleration[1];
         document.getElementById("accelerationZ").innerHTML =
-          accelerationFifo.buffer[accelerationFifo.buffer.length - 1][2];
+          lastAcceleration[2];
       },
       true
     );
 
     window.addEventListener("deviceorientation", (e) => {
-      let euler = [
-        Math.round(e.alpha),
-        Math.round(e.beta),
-        Math.round(e.gamma),
-      ];
-      euler = add(scalarMult(Math.PI / 180, diff(euler, [0, -180, -90])), [
-        0,
-        -Math.PI,
-        -Math.PI / 2,
-      ]);
-
+      const { alpha, beta, gamma } = e;
+      let euler = Vec3(alpha, beta, gamma).map((x) => Math.round(x));
+      euler = euler
+        .sub(Vec3(0, -180, -90))
+        .scale(Math.PI / 180)
+        .add(Vec3(0, -Math.PI, -Math.PI / 2));
       eulerFifo.push(euler);
-      document.getElementById("alpha").innerHTML = euler[0].toFixed(2);
-      document.getElementById("beta").innerHTML = euler[1].toFixed(2);
-      document.getElementById("gamma").innerHTML = euler[2].toFixed(2);
+      const [x, y, z] = euler.toArray();
+      document.getElementById("alpha").innerHTML = x.toFixed(2);
+      document.getElementById("beta").innerHTML = y.toFixed(2);
+      document.getElementById("gamma").innerHTML = z.toFixed(2);
     });
   } else {
     document.getElementById("deviceData").style.visibility = "hidden";
   }
-  preventScrollingMobile();
 }
 
 function keyDown(e) {
   isManual = true;
+  const keySpeed = 0.25;
   switch (e.key) {
     case "a":
-      eulerFifo.push(add(averageVectorFifo(eulerFifo), [-0.1, 0, 0]));
+      eulerFifo.push(averageVectorFifo(eulerFifo).add(Vec3(-keySpeed, 0, 0)));
       break;
     case "d":
-      eulerFifo.push(add(averageVectorFifo(eulerFifo), [0.1, 0, 0]));
+      eulerFifo.push(averageVectorFifo(eulerFifo).add(Vec3(keySpeed, 0, 0)));
       break;
     case "w":
-      eulerFifo.push(add(averageVectorFifo(eulerFifo), [0, 0.1, 0]));
+      eulerFifo.push(averageVectorFifo(eulerFifo).add(Vec3(0, keySpeed, 0)));
       break;
     case "s":
-      eulerFifo.push(add(averageVectorFifo(eulerFifo), [0, -0.1, 0]));
+      eulerFifo.push(averageVectorFifo(eulerFifo).add(Vec3(0, -keySpeed, 0)));
       break;
   }
 }
 
 function touchStart(e) {
-  let rect = canvas.getBoundingClientRect();
-  mouse[0] = e.touches[0].clientY - rect.top;
-  mouse[1] = e.touches[0].clientX - rect.left;
+  const { top, left } = canvas.getBoundingClientRect();
+  const { clientX, clientY } = e.touches[0];
+  mouse = Vec2(clientY, clientX).sub(Vec2(top, left));
   down = true;
 }
 
@@ -639,27 +177,30 @@ function touchEnd() {
 }
 
 function touchMove(e) {
-  let rect = canvas.getBoundingClientRect();
-  let mx = e.touches[0].clientX - rect.left,
-    my = e.touches[0].clientY - rect.top;
+  const { top, left } = canvas.getBoundingClientRect();
+  const { clientX, clientY } = e.touches[0];
+  const newMouse = Vec2(clientY, clientX).sub(Vec2(top, left));
 
-  if (!down || (mx == mouse[0] && my == mouse[1])) {
+  if (!down || newMouse.equals(mouse)) {
     return;
   }
-
-  let dx = mx - mouse[1];
-  let dy = my - mouse[0];
-  cam.param[1] = cam.param[1] - 2 * Math.PI * (dx / canvas.width);
-  cam.param[2] = cam.param[2] + 2 * Math.PI * (dy / canvas.height);
-
-  mouse[0] = my;
-  mouse[1] = mx;
+  const [dx, dy] = newMouse.sub(mouse).toArray();
+  camera.param = camera.param.add(
+    Vec3(
+      0,
+      ...Vec2(
+        -2 * Math.PI * (dy / canvas.width),
+        2 * Math.PI * (dx / canvas.height)
+      ).toArray()
+    )
+  );
+  mouse = newMouse;
 }
 
 function mouseDown(e) {
-  let rect = canvas.getBoundingClientRect();
-  mouse[0] = e.clientY - rect.top;
-  mouse[1] = e.clientX - rect.left;
+  const { top, left } = canvas.getBoundingClientRect();
+  const { clientX, clientY } = e;
+  mouse = Vec2(clientY, clientX).sub(Vec2(top, left));
   down = true;
 }
 
@@ -668,234 +209,213 @@ function mouseUp() {
 }
 
 function mouseMove(e) {
-  let rect = canvas.getBoundingClientRect();
-  let mx = e.clientX - rect.left,
-    my = e.clientY - rect.top;
-  if (!down || (mx == mouse[0] && my == mouse[1])) {
+  const { top, left } = canvas.getBoundingClientRect();
+  const { clientX, clientY } = e;
+  const newMouse = Vec2(clientY, clientX).sub(Vec2(top, left));
+
+  if (!down || newMouse.equals(mouse)) {
     return;
   }
-
-  let dx = mx - mouse[1];
-  let dy = my - mouse[0];
-  cam.param[1] = cam.param[1] - 2 * Math.PI * (dx / canvas.width);
-  cam.param[2] = cam.param[2] + 2 * Math.PI * (dy / canvas.height);
-
-  mouse[0] = my;
-  mouse[1] = mx;
+  const [dx, dy] = newMouse.sub(mouse).toArray();
+  camera.param = camera.param.add(
+    Vec3(
+      0,
+      ...Vec2(
+        -2 * Math.PI * (dy / canvas.width),
+        2 * Math.PI * (dx / canvas.height)
+      ).toArray()
+    )
+  );
+  mouse = newMouse;
 }
 
-function drawCurve(data, rgb) {
-  for (let i = 0; i < curve.length - 1; i++) {
-    draw3DLine([curve[i], curve[i + 1]], rgb, data);
+function mouseWheel(e) {
+  camera.param = camera.param.add(Vec3(e.deltaY * 0.01, 0, 0));
+  isWheelUsed = true;
+}
+
+function averageVectorFifo(fifo) {
+  if (!fifo.buffer.length) return Vec3();
+  return fifo.reduce((e, x) => e.add(x), Vec3()).scale(1 / fifo.buffer.length);
+}
+
+function averageVector(...vec3s) {
+  if (!vec3s.length) return Vec3();
+  let acc = Vec3();
+  for (let i = 0; i < vec3s.length; i++) {
+    acc = acc.add(vec3s[i]);
   }
+  return acc.scale(1 / vec3s.length);
 }
 
-function drawAxis(data) {
-  draw3DLine(
-    [
-      [0, 0, 0],
-      [1, 0, 0],
-    ],
-    [255, 255, 255, 255],
-    data
-  );
-  draw3DLine(
-    [
-      [0, 0, 0],
-      [0, 1, 0],
-    ],
-    [255, 255, 255, 255],
-    data
-  );
-  draw3DLine(
-    [
-      [0, 0, 0],
-      [0, 0, 1],
-    ],
-    [255, 255, 255, 255],
-    data
-  );
-}
+function updateDynamicsDesktop(dt) {
+  const prob = 0.3;
+  const sigma = 10;
+  myDevice.computeBasisFromEuler();
+  let randomCoin = Math.random() < prob ? 1 : 0;
+  let force = matrixTransposeProd(myDevice.basis, myDevice.pos).scale(-1);
+  let newAcc = force.scale(randomCoin).add(Vec3(1, 0, 0).scale(1 - randomCoin));
+  accelerationFifo.push(newAcc);
+  randomCoin = Math.random() < prob ? 1 : 0;
+  let randomEulerAcc = Vec3(
+    -1 * 2 * Math.random(),
+    -1 * 2 * Math.random(),
+    -1 * 2 * Math.random()
+  ).scale(sigma);
+  randomEulerAcc = randomEulerAcc
+    .scale(randomCoin)
+    .add(Vec3().scale(1 - randomCoin));
+  randomEulerAcc = randomEulerAcc.sub(myDevice.eulerSpeed);
 
-function averageVectorFifo(x) {
-  let acc = [0, 0, 0];
-  for (let i = 0; i < x.buffer.length; i++) {
-    acc = add(acc, x.buffer[i]);
-  }
-  return x.buffer.length === 0 ? acc : scalarMult(1.0 / x.buffer.length, acc);
+  // integration
+  eulerFifo.push(myDevice.euler.add(myDevice.eulerSpeed.scale(dt)));
+  myDevice.eulerSpeed = myDevice.eulerSpeed.add(randomEulerAcc.scale(dt));
 }
 
 function updateCurve(dt) {
   if (curve.length == 0) {
-    curve[0] = [0, 0, 0];
+    curve.push(Vec3(0, 0, 0));
   }
 
+  // when running on desktop
   if (!isMobile && !isManual) {
-    myDevice.computeBasisFromEuler();
-    let randomCoin = Math.random() < 0.3 ? 1 : 0;
-    let force = scalarMult(
-      -1,
-      matrixProdTranspose(
-        myDevice.basis[0],
-        myDevice.basis[1],
-        myDevice.basis[2],
-        myDevice.pos
-      )
-    );
-    let newAcc = add(
-      scalarMult(randomCoin, force),
-      scalarMult(1 - randomCoin, [1, 0, 0])
-    );
-    accelerationFifo.push(newAcc);
-    randomCoin = Math.random() < 0.3 ? 1 : 0;
-    let randomEulerAcc = scalarMult(10, [
-      -1 * 2 * Math.random(),
-      -1 * 2 * Math.random(),
-      -1 * 2 * Math.random(),
-    ]);
-    randomEulerAcc = add(
-      scalarMult(randomCoin, randomEulerAcc),
-      scalarMult(1 - randomCoin, [0, 0, 0])
-    );
-    randomEulerAcc = diff(randomEulerAcc, myDevice.eulerSpeed);
-    // integration
-    eulerFifo.push(add(myDevice.euler, scalarMult(dt, myDevice.eulerSpeed)));
-    myDevice.eulerSpeed = add(
-      myDevice.eulerSpeed,
-      scalarMult(dt, randomEulerAcc)
-    );
+    updateDynamicsDesktop(dt);
   }
 
-  let averageAcceleration = diff(
-    averageVectorFifo(accelerationFifo),
+  let averageAcceleration = averageVectorFifo(accelerationFifo).sub(
     accelerationCalibration
   );
-  let averageEuler = diff(averageVectorFifo(eulerFifo), eulerCalibration);
+  let averageEuler = averageVectorFifo(eulerFifo).sub(eulerCalibration);
 
   myDevice.computeBasisFromEuler();
-  let accelerationSpace = matrixProd(
-    myDevice.basis[0],
-    myDevice.basis[1],
-    myDevice.basis[2],
-    averageAcceleration
-  );
+  let accelerationSpace = matrixProd(myDevice.basis, averageAcceleration);
   // friction
-  accelerationSpace = diff(accelerationSpace, myDevice.vel);
+  accelerationSpace = accelerationSpace.sub(myDevice.vel);
   //euler integration
-  myDevice.pos = add(
-    myDevice.pos,
-    add(
-      scalarMult(dt, myDevice.vel),
-      scalarMult(0.5 * dt * dt, accelerationSpace)
-    )
-  );
-  myDevice.vel = add(myDevice.vel, scalarMult(dt, accelerationSpace));
-
+  myDevice.pos = myDevice.pos
+    .add(myDevice.vel.scale(dt))
+    .add(accelerationSpace.scale(0.5 * dt * dt));
+  myDevice.vel = myDevice.vel.add(accelerationSpace.scale(dt));
   myDevice.euler = averageEuler;
+  curve.push(myDevice.pos.clone());
 
-  curve.push(vec3(myDevice.pos[0], myDevice.pos[1], myDevice.pos[2]));
-
-  minCurve = [
-    Math.min(minCurve[0], myDevice.pos[0]),
-    Math.min(minCurve[1], myDevice.pos[1]),
-    Math.min(minCurve[2], myDevice.pos[2]),
-  ];
-  maxCurve = [
-    Math.max(maxCurve[0], myDevice.pos[0]),
-    Math.max(maxCurve[1], myDevice.pos[1]),
-    Math.max(maxCurve[2], myDevice.pos[2]),
-  ];
-
-  let center = add(minCurve, maxCurve);
-  center = scalarMult(0.5, center);
-  let radius = myNorm(diff(maxCurve, center));
-  cam.param[0] = radius;
+  minCurve = minCurve.op(myDevice.pos, (a, b) => Math.min(a, b));
+  maxCurve = maxCurve.op(myDevice.pos, (a, b) => Math.max(a, b));
+  const center = minCurve.add(maxCurve).scale(0.5);
+  const radius = maxCurve.sub(center).length();
+  if (!isWheelUsed) {
+    camera.param = Vec3(radius, ...camera.param.take(1, 3).toArray());
+  }
 }
 
-function drawDeviceAxis(data) {
-  draw3DLine(
-    [myDevice.pos, add(myDevice.pos, myDevice.basis[0])],
-    [255, 0, 0, 255],
-    data
-  );
-  draw3DLine(
-    [myDevice.pos, add(myDevice.pos, myDevice.basis[1])],
-    [0, 255, 0, 255],
-    data
-  );
-  draw3DLine(
-    [myDevice.pos, add(myDevice.pos, myDevice.basis[2])],
-    [0, 0, 255, 255],
-    data
+function drawAxis() {
+  const axis = "xyz";
+  const e = Vec.e(3);
+  for (let i = 0; i < 3; i++) {
+    scene.addElement(
+      Scene.Line.builder()
+        .name(`${axis[i]}-axis`)
+        .start(Vec3(0, 0, 0))
+        .end(e(i))
+        .color([dirac(0)(i) * 255, dirac(1)(i) * 255, dirac(2)(i) * 255, 255])
+        .build()
+    );
+  }
+}
+
+function drawDevice() {
+  for (let i = 0; i < linesIndexs.length; i++) {
+    const edge = linesIndexs[i];
+    const start = myDevice.pos.add(matrixProd(myDevice.basis, cube[edge[0]]));
+    const end = myDevice.pos.add(matrixProd(myDevice.basis, cube[edge[1]]));
+    scene.addElement(
+      Scene.Line.builder()
+        .name(`device_${edge[0]}_${edge[1]}`)
+        .start(start)
+        .end(end)
+        .color([255, 255, 255, 255])
+        .build()
+    );
+  }
+  for (let i = 0; i < 3; i++) {
+    scene.addElement(
+      Scene.Line.builder()
+        .name(`device_frame${i}`)
+        .start(myDevice.pos)
+        .end(myDevice.pos.add(myDevice.basis[i]))
+        .color([dirac(0)(i) * 255, dirac(1)(i) * 255, dirac(2)(i) * 255, 255])
+        .build()
+    );
+  }
+}
+function drawCurve() {
+  const K = 500;
+  const n = curve.length;
+  scene.addElement(
+    Scene.Path.builder()
+      .name("devicePath")
+      .path(n > K ? curve.filter((_, i) => i > n - K) : curve)
+      .color([0, 255, 0, 255])
+      .build()
   );
 }
 
-function calibration(dt, data) {
+function calibration(dt) {
   // calibration
   let averageAcceleration = averageVectorFifo(accelerationFifo);
   let averageEulerSpeed = averageVectorFifo(eulerFifo);
-  accelerationCalibration = add(
-    accelerationCalibration,
-    scalarMult(
-      1.0 / calibrationIte,
-      diff(averageAcceleration, accelerationCalibration)
-    )
+  accelerationCalibration = accelerationCalibration.add(
+    averageAcceleration.sub(accelerationCalibration).scale(1.0 / calibrationIte)
   );
-  eulerCalibration = add(
-    eulerCalibration,
-    scalarMult(1.0 / calibrationIte, diff(averageEulerSpeed, eulerCalibration))
+  eulerCalibration = eulerCalibration.add(
+    averageEulerSpeed.sub(eulerCalibration).scale(1 / calibrationIte)
   );
   calibrationIte++;
 
   // UI stuff
-  let color = [255, 255, 255, 255];
+  const color = [255, 255, 255, 255];
   calibrationLoadingUI.percentFill =
     calibrationLoadingUI.percentFill + dt / maxCalibrationTimeInSeconds;
-  let maxIndex = Math.floor(
-    calibrationLoadingUI.percentFill * calibrationLoadingUI.size[0]
+  const maxIndex = Math.floor(
+    calibrationLoadingUI.percentFill * calibrationLoadingUI.size.get(0)
   );
 
-  let endPoint = calibrationLoadingUI.pos;
-  let endPointW = add(calibrationLoadingUI.pos, [
-    calibrationLoadingUI.size[0],
-    0,
-  ]);
-  let endPointH = add(calibrationLoadingUI.pos, [
-    0,
-    calibrationLoadingUI.size[1],
-  ]);
-  let endPointWH = add(calibrationLoadingUI.pos, calibrationLoadingUI.size);
+  const endPoint = calibrationLoadingUI.pos;
+  const endPointW = calibrationLoadingUI.pos.add(
+    Vec2(calibrationLoadingUI.size.get(0), 0)
+  );
+  const endPointH = calibrationLoadingUI.pos.add(
+    Vec2(0, calibrationLoadingUI.size.get(1))
+  );
+  const endPointWH = calibrationLoadingUI.pos.add(calibrationLoadingUI.size);
 
   // revert x with y
-  drawLineInt(
-    [endPoint[1], endPoint[0]],
-    [endPointW[1], endPointW[0]],
-    color,
-    data
+  tela.drawLineInt(
+    Vec2(endPoint.get(1), endPoint.get(0)),
+    Vec2(endPointW.get(1), endPointW.get(0)),
+    color
   );
-  drawLineInt(
-    [endPointW[1], endPointW[0]],
-    [endPointWH[1], endPointWH[0]],
-    color,
-    data
+  tela.drawLineInt(
+    Vec2(endPointW.get(1), endPointW.get(0)),
+    Vec2(endPointWH.get(1), endPointWH.get(0)),
+    color
   );
-  drawLineInt(
-    [endPointWH[1], endPointWH[0]],
-    [endPointH[1], endPointH[0]],
-    color,
-    data
+  tela.drawLineInt(
+    Vec2(endPointWH.get(1), endPointWH.get(0)),
+    Vec2(endPointH.get(1), endPointH.get(0)),
+    color
   );
-  drawLineInt(
-    [endPointH[1], endPointH[0]],
-    [endPoint[1], endPoint[0]],
-    color,
-    data
+  tela.drawLineInt(
+    Vec2(endPointH.get(1), endPointH.get(0)),
+    Vec2(endPoint.get(1), endPoint.get(0)),
+    color
   );
 
   for (let i = 0; i < maxIndex; i++) {
-    let x1 = add(endPoint, [i, 0]);
-    let x2 = add(endPointH, [i, 0]);
-    drawLineInt([x1[1], x1[0]], [x2[1], x2[0]], color, data);
+    const dir = Vec2(i, 0);
+    const x1 = endPoint.add(dir);
+    const x2 = endPointH.add(dir);
+    drawLineInt(Vec2(x1.get(1), x1.get(0)), Vec2(x2.get(1), x2.get(0)), color);
   }
 
   if (calibrationLoadingUI.percentFill > 1) {
@@ -909,13 +429,7 @@ function draw() {
   startTime = new Date().getTime();
   time += dt;
 
-  let image, data;
-
-  ctx.fillStyle = "rgba(0, 0, 0, 255)";
-  ctx.globalCompositeOperation = "source-over";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  image = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  data = image.data;
+  tela.fill([0, 0, 0, 255]);
 
   /**
    * drawing and animation
@@ -924,23 +438,24 @@ function draw() {
   if (isCalibrating && isMobile) {
     calibration(dt, data);
   } else {
-    cam.orbit();
+    camera.orbit();
     updateCurve(dt);
-    drawDeviceAxis(data);
-    drawAxis(data);
-    drawCurve(data, [0, 255, 0, 255]);
+    drawDevice();
+    drawAxis();
+    drawCurve();
   }
 
-  ctx.putImageData(image, 0, 0);
+  camera.sceneShot(scene).to(tela);
 
   // rapid fix for text
   if (isCalibrating && isMobile) {
+    const pos = calibrationLoadingUI.pos.toArray();
     ctx.font = "15px serif";
     ctx.fillStyle = "rgba(255, 255, 255, 255)";
     ctx.fillText(
       "Get your device in a stationary position for calibration",
-      calibrationLoadingUI.pos[0],
-      calibrationLoadingUI.pos[1] - 10
+      pos[0],
+      pos[1] - 10
     );
   } else if (!isMobile) {
     ctx.font = "15px serif";
