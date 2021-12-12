@@ -415,7 +415,11 @@ function calibration(dt) {
     const dir = Vec2(i, 0);
     const x1 = endPoint.add(dir);
     const x2 = endPointH.add(dir);
-    drawLineInt(Vec2(x1.get(1), x1.get(0)), Vec2(x2.get(1), x2.get(0)), color);
+    tela.drawLineInt(
+      Vec2(x1.get(1), x1.get(0)),
+      Vec2(x2.get(1), x2.get(0)),
+      color
+    );
   }
 
   if (calibrationLoadingUI.percentFill > 1) {
@@ -436,7 +440,7 @@ function draw() {
    **/
 
   if (isCalibrating && isMobile) {
-    calibration(dt, data);
+    calibration(dt);
   } else {
     camera.orbit();
     updateCurve(dt);
@@ -450,11 +454,11 @@ function draw() {
   // rapid fix for text
   if (isCalibrating && isMobile) {
     const pos = calibrationLoadingUI.pos.toArray();
-    ctx.font = "15px serif";
+    ctx.font = "11px";
     ctx.fillStyle = "rgba(255, 255, 255, 255)";
     ctx.fillText(
       "Get your device in a stationary position for calibration",
-      pos[0],
+      pos[0] - 25,
       pos[1] - 10
     );
   } else if (!isMobile) {
