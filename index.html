@@ -7,17 +7,40 @@
     <title>3D Route Demo</title>
     <!-- main style -->
     <link rel="stylesheet" href="./index.css" />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/icon?family=Material+Icons"
+      crossorigin="anonymous"
+    />
   </head>
   <body>
     <div id="app">
+      <div class="tools">
+        <i class="material-icons">
+          <a
+            title="Github"
+            href="https://github.com/pedroth/3d-route-demo"
+            target="_blank"
+            rel="noopener"
+            >code</a
+          >
+        </i>
+        <i class="material-icons">
+          <a title="Permalink" href="javascript:void(0)" id="permalink"
+            >link
+          </a>
+        </i>
+        <i class="material-icons"
+          ><a href="javascript:void(0)" id="sensorDataIcon">sensors</a></i
+        ><i class="material-icons"
+          ><a href="javascript:void(0)" id="gpsIcon">gps_fixed</a></i
+        >
+      </div>
       <canvas id="canvas"></canvas>
       <div id="deviceData">
-        <li>acceleration x: <span id="accelerationX"></span>g</li>
-        <li>acceleration y: <span id="accelerationY"></span>g</li>
-        <li>acceleration z: <span id="accelerationZ"></span>g</li>
-        <li>rotation alpha: <span id="alpha"></span>rad</li>
-        <li>rotation beta: <span id="beta"></span>rad</li>
-        <li>rotation gamma: <span id="gamma"></span>rad</li>
+        <div id="accelerationData"></div>
+        <div id="rotationData"></div>
+        <div id="gpsData"></div>
       </div>
     </div>
   </body>

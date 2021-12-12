@@ -30,6 +30,7 @@ const isMobile =
     navigator.userAgent
   );
 let isWheelUsed = false;
+let isGpsMode = false;
 
 //error correcting variables
 let samples = 20;
@@ -88,7 +89,30 @@ function resize() {
   tela = new Canvas(canvas);
 }
 
+function addIconControls() {
+  const deviceDataUI = document.getElementById("deviceData");
+  deviceDataUI.style.visibility = "hidden";
+
+  const sensorIcon = document.getElementById("sensorDataIcon");
+  sensorIcon.title = "Toggle sensor data visibility";
+
+  const gpsIcon = document.getElementById("gpsIcon");
+  gpsIcon.title = "Toggle between gps data and acceleration data";
+  // Add onClick actions to sensorDataIcon and gpsIcon
+  sensorIcon.onclick = () => {
+    const isHidden = deviceDataUI.style.visibility === "hidden";
+    deviceDataUI.style.visibility = isHidden ? "visible" : "hidden";
+    sensorIcon.innerHTML = isHidden ? "sensors_off" : "sensors";
+  };
+
+  gpsIcon.onclick = () => {
+    isGpsMode = !isGpsMode;
+    gpsIcon.innerHTML = isGpsMode ? "gps_off" : "gps_fixed";
+  };
+}
+
 function init() {
+  addIconControls();
   canvas.addEventListener("touchstart", touchStart, false);
   canvas.addEventListener("touchend", touchEnd, false);
   canvas.addEventListener("touchmove", touchMove, false);
@@ -118,12 +142,7 @@ function init() {
         );
         const lastAcceleration =
           accelerationFifo.buffer[accelerationFifo.buffer.length - 1].toArray();
-        document.getElementById("accelerationX").innerHTML =
-          lastAcceleration[0];
-        document.getElementById("accelerationY").innerHTML =
-          lastAcceleration[1];
-        document.getElementById("accelerationZ").innerHTML =
-          lastAcceleration[2];
+        updateAccelerationDataUI(lastAcceleration);
       },
       true
     );
@@ -136,33 +155,48 @@ function init() {
         .scale(Math.PI / 180)
         .add(Vec3(0, -Math.PI, -Math.PI / 2));
       eulerFifo.push(euler);
-      const [x, y, z] = euler.toArray();
-      document.getElementById("alpha").innerHTML = x.toFixed(2);
-      document.getElementById("beta").innerHTML = y.toFixed(2);
-      document.getElementById("gamma").innerHTML = z.toFixed(2);
+      const eulerArray = euler.toArray();
+      updateRotationDataUI(eulerArray);
     });
-  } else {
-    document.getElementById("deviceData").style.visibility = "hidden";
   }
+}
+
+function updateAccelerationDataUI(accelerationArray) {
+  document.getElementById("accelerationData").innerHTML = `(${accelerationArray
+    .map((x) => x.toFixed(2))
+    .join(",")}) m/s²`;
+}
+
+function updateRotationDataUI(eulerArray) {
+  eulerArray = !eulerArray
+    ? myDevice.euler.toArray().map((x) => x % (2 * Math.PI))
+    : eulerArray;
+  document.getElementById("rotationData").innerHTML = `(${eulerArray
+    .map((x) => x.toFixed(2))
+    .join(",")}) rad`;
 }
 
 function keyDown(e) {
   isManual = true;
   const keySpeed = 0.25;
+  let eulerSpeed = Vec3();
   switch (e.key) {
     case "a":
-      eulerFifo.push(averageVectorFifo(eulerFifo).add(Vec3(-keySpeed, 0, 0)));
+      eulerSpeed = Vec3(-keySpeed, 0, 0);
       break;
     case "d":
-      eulerFifo.push(averageVectorFifo(eulerFifo).add(Vec3(keySpeed, 0, 0)));
+      eulerSpeed = Vec3(keySpeed, 0, 0);
       break;
     case "w":
-      eulerFifo.push(averageVectorFifo(eulerFifo).add(Vec3(0, keySpeed, 0)));
+      eulerSpeed = Vec3(0, keySpeed, 0);
       break;
     case "s":
-      eulerFifo.push(averageVectorFifo(eulerFifo).add(Vec3(0, -keySpeed, 0)));
+      eulerSpeed = Vec3(0, -keySpeed, 0);
       break;
   }
+  const euler = averageVectorFifo(eulerFifo).add(eulerSpeed);
+  eulerFifo.push(euler);
+  updateRotationDataUI();
 }
 
 function touchStart(e) {
@@ -254,7 +288,9 @@ function updateDynamicsDesktop(dt) {
   myDevice.computeBasisFromEuler();
   let randomCoin = Math.random() < prob ? 1 : 0;
   let force = matrixTransposeProd(myDevice.basis, myDevice.pos).scale(-1);
-  let newAcc = force.scale(randomCoin).add(Vec3(1, 0, 0).scale(1 - randomCoin));
+  const newAcc = force
+    .scale(randomCoin)
+    .add(Vec3(1, 0, 0).scale(1 - randomCoin));
   accelerationFifo.push(newAcc);
   randomCoin = Math.random() < prob ? 1 : 0;
   let randomEulerAcc = Vec3(
@@ -266,10 +302,13 @@ function updateDynamicsDesktop(dt) {
     .scale(randomCoin)
     .add(Vec3().scale(1 - randomCoin));
   randomEulerAcc = randomEulerAcc.sub(myDevice.eulerSpeed);
+  updateAccelerationDataUI(newAcc.toArray());
 
-  // integration
-  eulerFifo.push(myDevice.euler.add(myDevice.eulerSpeed.scale(dt)));
+  // euler integration
+  const euler = myDevice.euler.add(myDevice.eulerSpeed.scale(dt));
+  eulerFifo.push(euler);
   myDevice.eulerSpeed = myDevice.eulerSpeed.add(randomEulerAcc.scale(dt));
+  updateRotationDataUI();
 }
 
 function updateCurve(dt) {
@@ -282,10 +321,8 @@ function updateCurve(dt) {
     updateDynamicsDesktop(dt);
   }
 
-  let averageAcceleration = Vec3() 
-  averageVectorFifo(accelerationFifo).sub(
-    accelerationCalibration
-  );
+  let averageAcceleration = Vec3();
+  averageVectorFifo(accelerationFifo).sub(accelerationCalibration);
   let averageEuler = averageVectorFifo(eulerFifo).sub(eulerCalibration);
 
   myDevice.computeBasisFromEuler();
@@ -455,7 +492,7 @@ function draw() {
   // rapid fix for text
   if (isCalibrating && isMobile) {
     const pos = calibrationLoadingUI.pos.toArray();
-    ctx.font = "11px";
+    ctx.font = "15px";
     ctx.fillStyle = "rgba(255, 255, 255, 255)";
     ctx.fillText(
       "Get your device in a stationary position for calibration",
@@ -465,7 +502,11 @@ function draw() {
   } else if (!isMobile) {
     ctx.font = "15px serif";
     ctx.fillStyle = "rgba(255, 255, 255, 255)";
-    ctx.fillText("This App uses a smart phone", 10, 10);
+    ctx.fillText(
+      "This app uses a smart phone",
+      canvas.width / 2 - 100,
+      canvas.height - 20
+    );
   }
 
   requestAnimationFrame(draw);
