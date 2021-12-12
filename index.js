@@ -46,18 +46,40 @@ let calibrationLoadingUI;
 //app variables
 let startTime = new Date().getTime();
 let time = 0;
-let curve = [];
+const curve = [];
 let minCurve = Vec3(-3, -3, -3);
 let maxCurve = Vec3(3, 3, 3);
 let myDevice = new Device();
+let cube = [
+  Vec3(0, 0, 0),
+  Vec3(1, 0, 0),
+  Vec3(0, 1, 0),
+  Vec3(1, 1, 0),
+  Vec3(0, 0, 1),
+  Vec3(1, 0, 1),
+  Vec3(0, 1, 1),
+  Vec3(1, 1, 1),
+].map((p) => p.mul(Vec3(0.618033, 1, 0.1)));
+const centerCube = averageVector(...cube);
+cube = cube.map((p) => p.sub(centerCube));
+const linesIndexs = [
+  [0, 1],
+  [0, 2],
+  [0, 4],
+  [1, 3],
+  [1, 5],
+  [2, 3],
+  [2, 6],
+  [3, 7],
+  [4, 5],
+  [4, 6],
+  [5, 7],
+  [6, 7],
+];
 
 /**
  * Main program
  */
-
-function preventScrollingMobile() {
-  document.body.style = "";
-}
 
 function resize() {
   canvas.width = window.innerWidth;
@@ -209,6 +231,15 @@ function averageVectorFifo(fifo) {
   return fifo.reduce((e, x) => e.add(x), Vec3()).scale(1 / fifo.buffer.length);
 }
 
+function averageVector(...vec3s) {
+  if (!vec3s.length) return Vec3();
+  let acc = Vec3();
+  for (let i = 0; i < vec3s.length; i++) {
+    acc = acc.add(vec3s[i]);
+  }
+  return acc.scale(1 / vec3s.length);
+}
+
 function updateDynamicsDesktop(dt) {
   const prob = 0.3;
   const sigma = 10;
@@ -235,7 +266,7 @@ function updateDynamicsDesktop(dt) {
 
 function updateCurve(dt) {
   if (curve.length == 0) {
-    curve[0] = Vec3(0, 0, 0);
+    curve.push(Vec3(0, 0, 0));
   }
 
   // when running on desktop
@@ -283,10 +314,23 @@ function drawAxis() {
 }
 
 function drawDevice() {
+  for (let i = 0; i < linesIndexs.length; i++) {
+    const edge = linesIndexs[i];
+    const start = myDevice.pos.add(matrixProd(myDevice.basis, cube[edge[0]]));
+    const end = myDevice.pos.add(matrixProd(myDevice.basis, cube[edge[1]]));
+    scene.addElement(
+      Scene.Line.builder()
+        .name(`device_${edge[0]}_${edge[1]}`)
+        .start(start)
+        .end(end)
+        .color([255, 255, 255, 255])
+        .build()
+    );
+  }
   for (let i = 0; i < 3; i++) {
     scene.addElement(
       Scene.Line.builder()
-        .name(`device_${i}`)
+        .name(`device_frame${i}`)
         .start(myDevice.pos)
         .end(myDevice.pos.add(myDevice.basis[i]))
         .color([dirac(0)(i) * 255, dirac(1)(i) * 255, dirac(2)(i) * 255, 255])
