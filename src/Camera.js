@@ -88,7 +88,7 @@ function intersectImagePlaneInCameraSpace(vertexOut, vertexIn, camera) {
 
 function drawLine(line, camera, canvas) {
   const { color: rgb } = line;
-  const {distanceToPlane} = camera;
+  const { distanceToPlane } = camera;
   // camera coords
   const cameraLine = [line.start, line.end];
   const start = line.start.sub(camera.eye);
@@ -134,7 +134,7 @@ function drawLine(line, camera, canvas) {
 
 function drawPath(path, camera, canvas) {
   const { path: lines } = path;
-  for (let i = 0; i < path.length - 1; i++) {
+  for (let i = 0; i < lines.length - 1; i++) {
     const line = Scene.Line.builder()
       .name(`${path.name}_${i}`)
       .start(lines[i])
