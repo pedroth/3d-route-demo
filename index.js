@@ -282,7 +282,8 @@ function updateCurve(dt) {
     updateDynamicsDesktop(dt);
   }
 
-  let averageAcceleration = averageVectorFifo(accelerationFifo).sub(
+  let averageAcceleration = Vec3() 
+  averageVectorFifo(accelerationFifo).sub(
     accelerationCalibration
   );
   let averageEuler = averageVectorFifo(eulerFifo).sub(eulerCalibration);
