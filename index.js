@@ -33,13 +33,15 @@ let isWheelUsed = false;
 let isGpsMode = false;
 
 //error correcting variables
-let samples = 20;
+let samples = 5;
 let accelerationFifo = new Fifo(samples);
-let eulerFifo = new Fifo(samples);
+let eulerSpeedFifo = new Fifo(samples);
+let eulerCallbackTime = new Date().getTime();
+let oldEulerFromCallback = Vec3();
 
 // calibration variables
 let accelerationCalibration = Vec3();
-let eulerCalibration = Vec3();
+let eulerSpeedCalibration = Vec3();
 let calibrationIte = 1;
 let isCalibrating = true;
 let maxCalibrationTimeInSeconds = 10;
@@ -141,11 +143,18 @@ function init() {
 function addRotationCallback() {
   window.addEventListener("deviceorientation", (e) => {
     const { alpha, beta, gamma } = e;
-    let euler = Vec3(alpha, beta, gamma).map((x) => Math.round(x));
-    euler = euler.scale(Math.PI / 180);
-    eulerFifo.push(euler);
-    const eulerArray = euler.toArray();
-    updateRotationDataUI(eulerArray);
+    const newTime = new Date().getTime();
+    const timeInBetweenCallsInSec = (newTime - eulerCallbackTime) * 1e-3;
+    eulerCallbackTime = newTime;
+
+    const newEuler = Vec3(alpha, beta, gamma).scale(Math.PI / 180);
+    const eulerSpeed = newEuler
+      .sub(oldEulerFromCallback)
+      .scale(1 / timeInBetweenCallsInSec);
+    eulerSpeedFifo.push(eulerSpeed);
+
+    oldEulerFromCallback = newEuler;
+    updateRotationDataUI(newEuler.toArray());
   });
 }
 
@@ -171,10 +180,10 @@ function updateAccelerationDataUI(accelerationArray) {
 }
 
 function updateRotationDataUI(eulerArray) {
-  eulerArray = !eulerArray
-    ? myDevice.euler.toArray().map((x) => x % (2 * Math.PI))
-    : eulerArray;
-  document.getElementById("rotationData").innerHTML = `(${eulerArray
+  const displayEuler = !eulerArray
+    ? myDevice.euler.map((x) => x % (2 * Math.PI)).toArray()
+    : [...eulerArray];
+  document.getElementById("rotationData").innerHTML = `(${displayEuler
     .map((x) => x * (180 / Math.PI))
     .map((x) => x.toFixed(2))
     .join(",")}) deg`;
@@ -182,7 +191,7 @@ function updateRotationDataUI(eulerArray) {
 
 function keyDown(e) {
   isManual = true;
-  const keySpeed = 0.25;
+  const keySpeed = 1;
   let eulerSpeed = Vec3();
   switch (e.key) {
     case "a":
@@ -198,9 +207,7 @@ function keyDown(e) {
       eulerSpeed = Vec3(0, -keySpeed, 0);
       break;
   }
-  const euler = averageVectorFifo(eulerFifo).add(eulerSpeed);
-  eulerFifo.push(euler);
-  updateRotationDataUI();
+  eulerSpeedFifo.push(eulerSpeed);
 }
 
 function touchStart(e) {
@@ -288,7 +295,7 @@ function averageVector(...vec3s) {
 
 function updateDynamicsDesktop(dt) {
   const prob = 0.3;
-  const sigma = 10;
+  const sigma = 3;
   myDevice.computeBasisFromEuler();
   let randomCoin = Math.random() < prob ? 1 : 0;
   let force = matrixTransposeProd(myDevice.basis, myDevice.pos).scale(-1);
@@ -311,8 +318,8 @@ function updateDynamicsDesktop(dt) {
 
   // euler integration
   myDevice.eulerSpeed = myDevice.eulerSpeed.add(randomEulerAcc.scale(dt));
-  const euler = myDevice.euler.add(myDevice.eulerSpeed.scale(dt));
-  eulerFifo.push(euler);
+  eulerSpeedFifo.push(myDevice.eulerSpeed);
+
   updateRotationDataUI();
 }
 
@@ -339,13 +346,14 @@ function updateCurve(dt) {
 }
 
 function updateDeviceRotation(dt) {
-  let averageEuler = averageVectorFifo(eulerFifo).sub(eulerCalibration);
-  myDevice.euler = averageEuler;
+  myDevice.eulerSpeed = averageVectorFifo(eulerSpeedFifo).sub(
+    eulerSpeedCalibration
+  );
+  myDevice.euler = myDevice.euler.add(myDevice.eulerSpeed.scale(dt));
 }
 
 function updateDevicePos(dt) {
-  let averageAcceleration = Vec3();
-  averageVectorFifo(accelerationFifo).sub(accelerationCalibration);
+  let averageAcceleration = averageVectorFifo(accelerationFifo).sub(accelerationCalibration);
   let accelerationSpace = matrixProd(myDevice.basis, averageAcceleration);
   // friction
   accelerationSpace = accelerationSpace.sub(myDevice.vel);
@@ -410,14 +418,15 @@ function drawCurve() {
 
 function calibration(dt) {
   // calibration
-  let averageAcceleration = averageVectorFifo(accelerationFifo);
-  let averageEulerSpeed = averageVectorFifo(eulerFifo);
-  accelerationCalibration = accelerationCalibration.add(
-    averageAcceleration.sub(accelerationCalibration).scale(1.0 / calibrationIte)
-  );
-  eulerCalibration = eulerCalibration.add(
-    averageEulerSpeed.sub(eulerCalibration).scale(1 / calibrationIte)
-  );
+  if (calibrationLoadingUI.percentFill > 1) {
+    calibrationLoadingUI.percentFill = 0;
+    isCalibrating = false;
+    const averageAcceleration = averageVectorFifo(accelerationFifo);
+    const averageEulerSpeed = averageVectorFifo(eulerSpeedFifo);
+    accelerationCalibration = averageAcceleration;
+    eulerSpeedCalibration = averageEulerSpeed;
+    return;
+  }
   calibrationIte++;
 
   // UI stuff
@@ -469,11 +478,6 @@ function calibration(dt) {
       color
     );
   }
-
-  if (calibrationLoadingUI.percentFill > 1) {
-    calibrationLoadingUI.percentFill = 0;
-    isCalibrating = false;
-  }
 }
 
 function draw() {
@@ -496,6 +500,8 @@ function draw() {
     drawAxis();
     drawCurve();
   }
+
+  isManual && updateRotationDataUI();
 
   camera.sceneShot(scene).to(tela);
 
