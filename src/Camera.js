@@ -12,9 +12,9 @@ export default class Camera {
   constructor(
     distanceToPlane = 1,
     alpha = Math.PI / 4,
-    param = Vec3(3, 0, Math.PI / 2),
+    param = Vec3(2, -Math.PI / 2, Math.PI / 2),
     focalPoint = Vec3(0, 0, 0),
-    eye = Vec3(3, 0, 0)
+    eye = Vec3(2, 0, 0)
   ) {
     this.distanceToPlane = distanceToPlane;
     this.alpha = alpha;

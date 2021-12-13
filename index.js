@@ -132,33 +132,36 @@ function init() {
     Vec2(canvas.width / 2, 25)
   );
 
-  //add device accelerometer  callback ?
   if (window.DeviceMotionEvent != undefined && isMobile) {
-    window.addEventListener(
-      "devicemotion",
-      (e) => {
-        accelerationFifo.push(
-          Vec3(-e.acceleration.y, -e.acceleration.x, -e.acceleration.z)
-        );
-        const lastAcceleration =
-          accelerationFifo.buffer[accelerationFifo.buffer.length - 1].toArray();
-        updateAccelerationDataUI(lastAcceleration);
-      },
-      true
-    );
-
-    window.addEventListener("deviceorientation", (e) => {
-      const { alpha, beta, gamma } = e;
-      let euler = Vec3(alpha, beta, gamma).map((x) => Math.round(x));
-      euler = euler
-        .sub(Vec3(0, -180, -90))
-        .scale(Math.PI / 180)
-        .add(Vec3(0, -Math.PI, -Math.PI / 2));
-      eulerFifo.push(euler);
-      const eulerArray = euler.toArray();
-      updateRotationDataUI(eulerArray);
-    });
+    addAccelerationCallback();
+    addRotationCallback();
   }
+}
+
+function addRotationCallback() {
+  window.addEventListener("deviceorientation", (e) => {
+    const { alpha, beta, gamma } = e;
+    let euler = Vec3(alpha, beta, gamma).map((x) => Math.round(x));
+    euler = euler.scale(Math.PI / 180);
+    eulerFifo.push(euler);
+    const eulerArray = euler.toArray();
+    updateRotationDataUI(eulerArray);
+  });
+}
+
+function addAccelerationCallback() {
+  window.addEventListener(
+    "devicemotion",
+    (e) => {
+      accelerationFifo.push(
+        Vec3(-e.acceleration.y, -e.acceleration.x, -e.acceleration.z)
+      );
+      const lastAcceleration =
+        accelerationFifo.buffer[accelerationFifo.buffer.length - 1].toArray();
+      updateAccelerationDataUI(lastAcceleration);
+    },
+    true
+  );
 }
 
 function updateAccelerationDataUI(accelerationArray) {
@@ -172,8 +175,9 @@ function updateRotationDataUI(eulerArray) {
     ? myDevice.euler.toArray().map((x) => x % (2 * Math.PI))
     : eulerArray;
   document.getElementById("rotationData").innerHTML = `(${eulerArray
+    .map((x) => x * (180 / Math.PI))
     .map((x) => x.toFixed(2))
-    .join(",")}) rad`;
+    .join(",")}) deg`;
 }
 
 function keyDown(e) {
@@ -182,10 +186,10 @@ function keyDown(e) {
   let eulerSpeed = Vec3();
   switch (e.key) {
     case "a":
-      eulerSpeed = Vec3(-keySpeed, 0, 0);
+      eulerSpeed = Vec3(keySpeed, 0, 0);
       break;
     case "d":
-      eulerSpeed = Vec3(keySpeed, 0, 0);
+      eulerSpeed = Vec3(-keySpeed, 0, 0);
       break;
     case "w":
       eulerSpeed = Vec3(0, keySpeed, 0);
@@ -292,6 +296,8 @@ function updateDynamicsDesktop(dt) {
     .scale(randomCoin)
     .add(Vec3(1, 0, 0).scale(1 - randomCoin));
   accelerationFifo.push(newAcc);
+  updateAccelerationDataUI(newAcc.toArray());
+
   randomCoin = Math.random() < prob ? 1 : 0;
   let randomEulerAcc = Vec3(
     -1 * 2 * Math.random(),
@@ -302,12 +308,11 @@ function updateDynamicsDesktop(dt) {
     .scale(randomCoin)
     .add(Vec3().scale(1 - randomCoin));
   randomEulerAcc = randomEulerAcc.sub(myDevice.eulerSpeed);
-  updateAccelerationDataUI(newAcc.toArray());
 
   // euler integration
+  myDevice.eulerSpeed = myDevice.eulerSpeed.add(randomEulerAcc.scale(dt));
   const euler = myDevice.euler.add(myDevice.eulerSpeed.scale(dt));
   eulerFifo.push(euler);
-  myDevice.eulerSpeed = myDevice.eulerSpeed.add(randomEulerAcc.scale(dt));
   updateRotationDataUI();
 }
 
@@ -315,26 +320,13 @@ function updateCurve(dt) {
   if (curve.length == 0) {
     curve.push(Vec3(0, 0, 0));
   }
-
   // when running on desktop
   if (!isMobile && !isManual) {
     updateDynamicsDesktop(dt);
   }
-
-  let averageAcceleration = Vec3();
-  averageVectorFifo(accelerationFifo).sub(accelerationCalibration);
-  let averageEuler = averageVectorFifo(eulerFifo).sub(eulerCalibration);
-
   myDevice.computeBasisFromEuler();
-  let accelerationSpace = matrixProd(myDevice.basis, averageAcceleration);
-  // friction
-  accelerationSpace = accelerationSpace.sub(myDevice.vel);
-  //euler integration
-  myDevice.pos = myDevice.pos
-    .add(myDevice.vel.scale(dt))
-    .add(accelerationSpace.scale(0.5 * dt * dt));
-  myDevice.vel = myDevice.vel.add(accelerationSpace.scale(dt));
-  myDevice.euler = averageEuler;
+  updateDeviceRotation(dt);
+  updateDevicePos(dt);
   curve.push(myDevice.pos.clone());
 
   minCurve = minCurve.op(myDevice.pos, (a, b) => Math.min(a, b));
@@ -344,6 +336,24 @@ function updateCurve(dt) {
   if (!isWheelUsed) {
     camera.param = Vec3(radius, ...camera.param.take(1, 3).toArray());
   }
+}
+
+function updateDeviceRotation(dt) {
+  let averageEuler = averageVectorFifo(eulerFifo).sub(eulerCalibration);
+  myDevice.euler = averageEuler;
+}
+
+function updateDevicePos(dt) {
+  let averageAcceleration = Vec3();
+  averageVectorFifo(accelerationFifo).sub(accelerationCalibration);
+  let accelerationSpace = matrixProd(myDevice.basis, averageAcceleration);
+  // friction
+  accelerationSpace = accelerationSpace.sub(myDevice.vel);
+  //euler integration
+  myDevice.vel = myDevice.vel.add(accelerationSpace.scale(dt));
+  myDevice.pos = myDevice.pos
+    .add(myDevice.vel.scale(dt))
+    .add(accelerationSpace.scale(0.5 * dt * dt));
 }
 
 function drawAxis() {
