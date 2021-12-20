@@ -302,7 +302,7 @@ function updateDynamicsDesktop(dt) {
   let force = matrixTransposeProd(myDevice.basis, myDevice.pos).scale(-1);
   const newAcc = force
     .scale(randomCoin)
-    .add(Vec3(1, 0, 0).scale(1 - randomCoin));
+    .add(Vec3(0, 1, 0).scale(1 - randomCoin));
   accelerationFifo.push(newAcc);
   updateAccelerationDataUI(newAcc.toArray());
 
@@ -357,7 +357,9 @@ function updateDevicePos(dt) {
   let averageAcceleration = averageVectorFifo(accelerationFifo).sub(
     accelerationCalibration
   );
-  let accelerationSpace = matrixProd(myDevice.basis, averageAcceleration);
+  let accelerationSpace = isMobile
+    ? averageAcceleration
+    : matrixProd(myDevice.basis, averageAcceleration);
   // friction
   accelerationSpace = accelerationSpace.sub(myDevice.vel);
   //euler integration
@@ -521,7 +523,7 @@ function draw() {
     ctx.font = "15px serif";
     ctx.fillStyle = "rgba(255, 255, 255, 255)";
     ctx.fillText(
-      "This app uses a smart phone",
+      "This app uses a smart phone. Use A,W,S,D to control.",
       canvas.width / 2 - 100,
       canvas.height - 20
     );
