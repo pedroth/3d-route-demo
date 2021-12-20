@@ -43,7 +43,7 @@ let oldEulerFromCallback = Vec3();
 let accelerationCalibration = Vec3();
 let eulerSpeedCalibration = Vec3();
 let isCalibrating = true;
-let maxCalibrationTimeInSeconds = 3;
+let maxCalibrationTimeInSeconds = 5;
 let calibrationLoadingUI;
 
 //app variables
