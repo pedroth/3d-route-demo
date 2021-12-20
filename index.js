@@ -42,9 +42,8 @@ let oldEulerFromCallback = Vec3();
 // calibration variables
 let accelerationCalibration = Vec3();
 let eulerSpeedCalibration = Vec3();
-let calibrationIte = 1;
 let isCalibrating = true;
-let maxCalibrationTimeInSeconds = 10;
+let maxCalibrationTimeInSeconds = 3;
 let calibrationLoadingUI;
 
 //app variables
@@ -150,7 +149,9 @@ function addRotationCallback() {
     const newEuler = Vec3(alpha, beta, gamma).scale(Math.PI / 180);
     const eulerSpeed = newEuler
       .sub(oldEulerFromCallback)
-      .scale(1 / timeInBetweenCallsInSec);
+      .scale(
+        1 / (timeInBetweenCallsInSec === 0 ? 1e-1 : timeInBetweenCallsInSec)
+      );
     eulerSpeedFifo.push(eulerSpeed);
 
     oldEulerFromCallback = newEuler;
@@ -353,7 +354,9 @@ function updateDeviceRotation(dt) {
 }
 
 function updateDevicePos(dt) {
-  let averageAcceleration = averageVectorFifo(accelerationFifo).sub(accelerationCalibration);
+  let averageAcceleration = averageVectorFifo(accelerationFifo).sub(
+    accelerationCalibration
+  );
   let accelerationSpace = matrixProd(myDevice.basis, averageAcceleration);
   // friction
   accelerationSpace = accelerationSpace.sub(myDevice.vel);
@@ -427,7 +430,6 @@ function calibration(dt) {
     eulerSpeedCalibration = averageEulerSpeed;
     return;
   }
-  calibrationIte++;
 
   // UI stuff
   const color = [255, 255, 255, 255];
