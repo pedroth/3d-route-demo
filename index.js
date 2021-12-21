@@ -15,11 +15,11 @@ import {
 import Vec, { Vec2, Vec3 } from "./src/Vec3.js";
 
 //drawing variables
-let canvas = document.getElementById("canvas");
-let ctx = canvas.getContext("2d");
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
 let tela = new Canvas(canvas);
-let scene = new Scene();
-let camera = new Camera();
+const scene = new Scene();
+const camera = new Camera();
 
 // ui variables
 let down = false;
@@ -43,7 +43,7 @@ let oldEulerFromCallback = Vec3();
 let accelerationCalibration = Vec3();
 let eulerSpeedCalibration = Vec3();
 let isCalibrating = true;
-let maxCalibrationTimeInSeconds = 5;
+let maxCalibrationTimeInSeconds = 7;
 let calibrationLoadingUI;
 
 //app variables
@@ -52,7 +52,7 @@ let time = 0;
 const curve = [];
 let minCurve = Vec3(-3, -3, -3);
 let maxCurve = Vec3(3, 3, 3);
-let myDevice = new Device();
+const myDevice = new Device();
 let cube = [
   Vec3(0, 0, 0),
   Vec3(1, 0, 0),
@@ -147,14 +147,20 @@ function addRotationCallback() {
     eulerCallbackTime = newTime;
 
     const newEuler = Vec3(alpha, beta, gamma).scale(Math.PI / 180);
-    const eulerSpeed = newEuler
-      .sub(oldEulerFromCallback)
-      .scale(
-        1 / (timeInBetweenCallsInSec === 0 ? 1e-1 : timeInBetweenCallsInSec)
-      );
-    eulerSpeedFifo.push(eulerSpeed);
+    // Angle interval here: https://w3c.github.io/deviceorientation/#deviceorientation
+    const newEulerDual = newEuler.add(Vec3(2 * Math.PI, 2 * Math.PI, Math.PI));
+    const dTheta = newEuler.sub(oldEulerFromCallback);
+    const dThetaDual = newEulerDual.sub(oldEulerFromCallback);
+    const finalDTheta = dTheta.op(dThetaDual, (a, b) =>
+      Math.abs(a) <= Math.abs(b) ? a : b
+    );
 
-    oldEulerFromCallback = newEuler;
+    const eulerSpeed = finalDTheta.scale(
+      1 / (timeInBetweenCallsInSec === 0 ? 1e-1 : timeInBetweenCallsInSec)
+    );
+    eulerSpeedFifo.push(eulerSpeed);
+    // retrieve corrected newEuler 
+    oldEulerFromCallback = finalDTheta.add(oldEulerFromCallback);
     updateRotationDataUI(newEuler.toArray());
   });
 }
@@ -485,7 +491,7 @@ function calibration(dt) {
 }
 
 function draw() {
-  let dt = 1e-3 * (new Date().getTime() - startTime);
+  const dt = 1e-3 * (new Date().getTime() - startTime);
   startTime = new Date().getTime();
   time += dt;
 
