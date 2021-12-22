@@ -33,15 +33,16 @@ let isWheelUsed = false;
 let isGpsMode = false;
 
 //error correcting variables
-let samples = 5;
+let samples = 7;
 let accelerationFifo = new Fifo(samples);
 let eulerSpeedFifo = new Fifo(samples);
+let eulerFifo = new Fifo(samples);
 let eulerCallbackTime = new Date().getTime();
 let oldEulerFromCallback = Vec3();
 
 // calibration variables
 let accelerationCalibration = Vec3();
-let eulerSpeedCalibration = Vec3();
+let eulerCalibration = Vec3();
 let isCalibrating = true;
 let maxCalibrationTimeInSeconds = 7;
 let calibrationLoadingUI;
@@ -110,6 +111,11 @@ function addIconControls() {
     isGpsMode = !isGpsMode;
     gpsIcon.innerHTML = isGpsMode ? "gps_off" : "gps_fixed";
   };
+
+  const rotationOnlyIcon = document.getElementById("rotationOnly");
+  rotationOnlyIcon.onclick = () => {
+    
+  }
 }
 
 function init() {
@@ -147,6 +153,8 @@ function addRotationCallback() {
     eulerCallbackTime = newTime;
 
     const newEuler = Vec3(alpha, beta, gamma).scale(Math.PI / 180);
+    eulerFifo.push(newEuler);
+
     // Angle interval here: https://w3c.github.io/deviceorientation/#deviceorientation
     const newEulerDual = newEuler.add(Vec3(2 * Math.PI, 2 * Math.PI, Math.PI));
     const dTheta = newEuler.sub(oldEulerFromCallback);
@@ -159,7 +167,7 @@ function addRotationCallback() {
       1 / (timeInBetweenCallsInSec === 0 ? 1e-1 : timeInBetweenCallsInSec)
     );
     eulerSpeedFifo.push(eulerSpeed);
-    // retrieve corrected newEuler 
+    // retrieve corrected newEuler
     oldEulerFromCallback = finalDTheta.add(oldEulerFromCallback);
     updateRotationDataUI(newEuler.toArray());
   });
@@ -353,10 +361,10 @@ function updateCurve(dt) {
 }
 
 function updateDeviceRotation(dt) {
-  myDevice.eulerSpeed = averageVectorFifo(eulerSpeedFifo).sub(
-    eulerSpeedCalibration
-  );
-  myDevice.euler = myDevice.euler.add(myDevice.eulerSpeed.scale(dt));
+  myDevice.eulerSpeed = averageVectorFifo(eulerSpeedFifo);
+  myDevice.euler = myDevice.euler
+    .add(myDevice.eulerSpeed.scale(dt))
+    .sub(eulerCalibration);
 }
 
 function updateDevicePos(dt) {
@@ -433,9 +441,9 @@ function calibration(dt) {
     calibrationLoadingUI.percentFill = 0;
     isCalibrating = false;
     const averageAcceleration = averageVectorFifo(accelerationFifo);
-    const averageEulerSpeed = averageVectorFifo(eulerSpeedFifo);
+    const averageEuler = averageVectorFifo(eulerFifo);
     accelerationCalibration = averageAcceleration;
-    eulerSpeedCalibration = averageEulerSpeed;
+    eulerCalibration = averageEuler;
     return;
   }
 
@@ -491,7 +499,7 @@ function calibration(dt) {
 }
 
 function draw() {
-  const dt = 1e-3 * (new Date().getTime() - startTime);
+  const dt = Math.min(0.75, 1e-3 * (new Date().getTime() - startTime));
   startTime = new Date().getTime();
   time += dt;
 
