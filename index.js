@@ -36,13 +36,12 @@ let isGpsMode = false;
 let samples = 7;
 let accelerationFifo = new Fifo(samples);
 let eulerSpeedFifo = new Fifo(samples);
-let eulerFifo = new Fifo(samples);
 let eulerCallbackTime = new Date().getTime();
 let oldEulerFromCallback = Vec3();
 
 // calibration variables
 let accelerationCalibration = Vec3();
-let eulerCalibration = Vec3();
+let eulerSpeedCalibration = Vec3();
 let isCalibrating = true;
 let maxCalibrationTimeInSeconds = 7;
 let calibrationLoadingUI;
@@ -113,9 +112,7 @@ function addIconControls() {
   };
 
   const rotationOnlyIcon = document.getElementById("rotationOnly");
-  rotationOnlyIcon.onclick = () => {
-    
-  }
+  rotationOnlyIcon.onclick = () => {};
 }
 
 function init() {
@@ -153,8 +150,6 @@ function addRotationCallback() {
     eulerCallbackTime = newTime;
 
     const newEuler = Vec3(alpha, beta, gamma).scale(Math.PI / 180);
-    eulerFifo.push(newEuler);
-
     // Angle interval here: https://w3c.github.io/deviceorientation/#deviceorientation
     const newEulerDual = newEuler.add(Vec3(2 * Math.PI, 2 * Math.PI, Math.PI));
     const dTheta = newEuler.sub(oldEulerFromCallback);
@@ -361,10 +356,10 @@ function updateCurve(dt) {
 }
 
 function updateDeviceRotation(dt) {
-  myDevice.eulerSpeed = averageVectorFifo(eulerSpeedFifo);
-  myDevice.euler = myDevice.euler
-    .add(myDevice.eulerSpeed.scale(dt))
-    .sub(eulerCalibration);
+  myDevice.eulerSpeed = averageVectorFifo(eulerSpeedFifo).sub(
+    eulerSpeedCalibration
+  );
+  myDevice.euler = myDevice.euler.add(myDevice.eulerSpeed.scale(dt));
 }
 
 function updateDevicePos(dt) {
@@ -441,9 +436,9 @@ function calibration(dt) {
     calibrationLoadingUI.percentFill = 0;
     isCalibrating = false;
     const averageAcceleration = averageVectorFifo(accelerationFifo);
-    const averageEuler = averageVectorFifo(eulerFifo);
+    const averageSpeedEuler = averageVectorFifo(eulerSpeedFifo);
     accelerationCalibration = averageAcceleration;
-    eulerCalibration = averageEuler;
+    eulerSpeedCalibration = averageSpeedEuler;
     return;
   }
 
