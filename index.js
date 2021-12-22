@@ -356,16 +356,16 @@ function updateCurve(dt) {
 }
 
 function updateDeviceRotation(dt) {
-  myDevice.eulerSpeed = averageVectorFifo(eulerSpeedFifo).sub(
-    eulerSpeedCalibration
-  );
+  myDevice.eulerSpeed = averageVectorFifo(eulerSpeedFifo);
+  // .sub(
+  //   eulerSpeedCalibration
+  // );
   myDevice.euler = myDevice.euler.add(myDevice.eulerSpeed.scale(dt));
 }
 
 function updateDevicePos(dt) {
-  let averageAcceleration = averageVectorFifo(accelerationFifo).sub(
-    accelerationCalibration
-  );
+  let averageAcceleration = Vec3();
+  // averageVectorFifo(accelerationFifo).sub(accelerationCalibration);
   let accelerationSpace = isMobile
     ? averageAcceleration
     : matrixProd(myDevice.basis, averageAcceleration);
