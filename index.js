@@ -36,6 +36,7 @@ let isGpsMode = false;
 let samples = 7;
 let accelerationFifo = new Fifo(samples);
 let eulerSpeedFifo = new Fifo(samples);
+let eulerFifo = new Fifo(samples);
 let eulerCallbackTime = new Date().getTime();
 let oldEulerFromCallback = Vec3();
 
@@ -150,6 +151,7 @@ function addRotationCallback() {
     eulerCallbackTime = newTime;
 
     const newEuler = Vec3(alpha, beta, gamma).scale(Math.PI / 180);
+    eulerFifo.push(newEuler);
     // Angle interval here: https://w3c.github.io/deviceorientation/#deviceorientation
     const newEulerDual = newEuler.add(Vec3(2 * Math.PI, 2 * Math.PI, Math.PI));
     const dTheta = newEuler.sub(oldEulerFromCallback);
@@ -175,8 +177,7 @@ function addAccelerationCallback() {
       accelerationFifo.push(
         Vec3(-e.acceleration.y, -e.acceleration.x, -e.acceleration.z)
       );
-      const lastAcceleration =
-        accelerationFifo.buffer[accelerationFifo.buffer.length - 1].toArray();
+      const lastAcceleration = accelerationFifo.getLast();
       updateAccelerationDataUI(lastAcceleration);
     },
     true
@@ -360,7 +361,8 @@ function updateDeviceRotation(dt) {
   // .sub(
   //   eulerSpeedCalibration
   // );
-  myDevice.euler = myDevice.euler.add(myDevice.eulerSpeed.scale(dt));
+  myDevice.euler = eulerFifo.getLast();
+  // myDevice.euler.add(myDevice.eulerSpeed.scale(dt));
 }
 
 function updateDevicePos(dt) {

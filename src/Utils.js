@@ -84,6 +84,10 @@ export class Fifo {
     }
     return acc;
   }
+
+  getLast() {
+    return this.buffer[this.index];
+  }
 }
 
 /**
