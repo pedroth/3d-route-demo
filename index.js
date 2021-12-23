@@ -268,7 +268,7 @@ function addAccelerationCallback() {
         Vec3(-e.acceleration.y, -e.acceleration.x, -e.acceleration.z)
       );
       const lastAcceleration = accelerationFifo.getLast();
-      updateAccelerationDataUI(lastAcceleration);
+      updateAccelerationDataUI(lastAcceleration.toArray());
     },
     true
   );
