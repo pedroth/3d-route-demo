@@ -105,7 +105,7 @@ function reset() {
 }
 
 function generatePermalink() {
-  const MAX_URL_SIZE = 1500;
+  const MAX_URL_SIZE = 1000;
   const VEC3_SERIAL_STR_SIZE = 15;
   const alpha = Math.ceil((curve.length * VEC3_SERIAL_STR_SIZE) / MAX_URL_SIZE);
   const url = window.location.href;
