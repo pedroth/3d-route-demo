@@ -97,6 +97,10 @@ function resize() {
 }
 
 function reset() {
+  if (isViewOnly) {
+    window.location.href = window.location.href.split(URL_CURVE)[0];
+    return;
+  }
   myDevice.pos = Vec3();
   myDevice.euler = Vec3();
   curve = [];
@@ -181,12 +185,6 @@ function addIconControls() {
     i.appendChild(a);
     toolsDiv.appendChild(i);
   });
-  // const googleFontLink = document.createElement("link");
-  // googleFontLink.rel = "stylesheet";
-  // googleFontLink.href =
-  //   "https://fonts.googleapis.com/icon?family=Material+Icons";
-  // googleFontLink.crossorigin = "anonymous";
-  // document.head.appendChild(googleFontLink);
 }
 
 function init() {
