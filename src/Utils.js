@@ -100,3 +100,24 @@ export const LoadingBar = function (pos, size) {
   this.size = size;
   this.percentFill = 0;
 };
+
+/**
+ *
+ * @param {Array<Vec3>} path
+ * @returns {String}
+ */
+export function serializeCurve(path) {
+  return path.map((x) => x.serialize()).join("|");
+}
+
+/**
+ *
+ * @param {String} serializedPath
+ * @returns {Array<Vec3>}
+ */
+export function deserializeCurve(serializedPath) {
+  return serializedPath.split("|").map((v) => {
+    const [x, y, z] = v.split(", ").map((s) => Number.parseFloat(s));
+    return Vec3(x, y, z);
+  });
+}

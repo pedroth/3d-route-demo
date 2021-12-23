@@ -40,6 +40,10 @@ export default class Vec {
     return "[" + this._vec.join(", ") + "]";
   }
 
+  serialize() {
+    return this._vec.join(", ");
+  }
+
   add(y) {
     return this.op(y, (a, b) => a + b);
   }

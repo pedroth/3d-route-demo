@@ -11,6 +11,8 @@ import {
   matrixTransposeProd,
   Fifo,
   LoadingBar,
+  serializeCurve,
+  deserializeCurve,
 } from "./src/Utils.js";
 import Vec, { Vec2, Vec3 } from "./src/Vec3.js";
 
@@ -33,7 +35,7 @@ let isWheelUsed = false;
 let isGpsMode = false;
 
 //error correcting variables
-let samples = 7;
+let samples = 3;
 let accelerationFifo = new Fifo(samples);
 let eulerSpeedFifo = new Fifo(samples);
 let eulerFifo = new Fifo(samples);
@@ -48,9 +50,10 @@ let maxCalibrationTimeInSeconds = 7;
 let calibrationLoadingUI;
 
 //app variables
+let isViewOnly = false;
 let startTime = new Date().getTime();
 let time = 0;
-const curve = [];
+let curve = [];
 let minCurve = Vec3(-3, -3, -3);
 let maxCurve = Vec3(3, 3, 3);
 const myDevice = new Device();
@@ -81,6 +84,8 @@ const linesIndexs = [
   [6, 7],
 ];
 
+const URL_CURVE = "?curve=";
+
 /**
  * Main program
  */
@@ -91,29 +96,97 @@ function resize() {
   tela = new Canvas(canvas);
 }
 
+function reset() {
+  myDevice.pos = Vec3();
+  myDevice.euler = Vec3();
+  curve = [];
+  minCurve = Vec3(-3, -3, -3);
+  minCurve = Vec3(3, 3, 3);
+}
+
+function generatePermalink() {
+  const MAX_URL_SIZE = 2000;
+  const VEC3_SERIAL_STR_SIZE = 15;
+  const alpha = Math.ceil((curve.length * VEC3_SERIAL_STR_SIZE) / MAX_URL_SIZE);
+  const url = window.location.href;
+  const baseUrl = url.split(URL_CURVE)[0];
+  window.location.href = `${baseUrl}${URL_CURVE}${encodeURI(
+    serializeCurve(curve.filter((_, i) => i % alpha === 0))
+  )}`;
+}
+
 function addIconControls() {
-  const deviceDataUI = document.getElementById("deviceData");
-  deviceDataUI.style.visibility = "hidden";
+  const iconControls = [
+    {
+      title: "Github",
+      id: "githubIcon",
+      link: "https://github.com/pedroth/3d-route-demo",
+      target: "_blank",
+      onClick: () => {},
+      icon: "code",
+    },
+    {
+      title: "Curve-Permalink",
+      id: "permalink",
+      link: "javascript:void(0)",
+      onClick: generatePermalink,
+      icon: "link",
+    },
+    // {
+    //   title: "Toggle between gps data and acceleration data",
+    //   id: "gpsIcon",
+    //   link: "javascript:void(0)",
+    //   onClick: () => {
+    //     const gpsIcon = document.getElementById("gpsIcon");
+    //     isGpsMode = !isGpsMode;
+    //     gpsIcon.innerHTML = isGpsMode ? "gps_off" : "gps_fixed";
+    //   },
+    //   icon: "gps_fixed",
+    // },
+    {
+      title: "Toggle sensor data visibility",
+      id: "sensorsIcon",
+      link: "javascript:void(0)",
+      onClick: () => {
+        const sensorIcon = document.getElementById("sensorsIcon");
+        const deviceDataUI = document.getElementById("deviceData");
+        const isHidden =
+          deviceDataUI.style.visibility === "" ||
+          deviceDataUI.style.visibility === "hidden";
+        deviceDataUI.style.visibility = isHidden ? "visible" : "hidden";
+        sensorIcon.innerHTML = isHidden ? "sensors_off" : "sensors";
+      },
+      icon: "sensors",
+    },
+    {
+      title: "Reset",
+      id: "resetIcon",
+      link: "javascript:void(0)",
+      onClick: reset,
+      icon: "restart_alt",
+    },
+  ];
 
-  const sensorIcon = document.getElementById("sensorDataIcon");
-  sensorIcon.title = "Toggle sensor data visibility";
-
-  const gpsIcon = document.getElementById("gpsIcon");
-  gpsIcon.title = "Toggle between gps data and acceleration data";
-  // Add onClick actions to sensorDataIcon and gpsIcon
-  sensorIcon.onclick = () => {
-    const isHidden = deviceDataUI.style.visibility === "hidden";
-    deviceDataUI.style.visibility = isHidden ? "visible" : "hidden";
-    sensorIcon.innerHTML = isHidden ? "sensors_off" : "sensors";
-  };
-
-  gpsIcon.onclick = () => {
-    isGpsMode = !isGpsMode;
-    gpsIcon.innerHTML = isGpsMode ? "gps_off" : "gps_fixed";
-  };
-
-  const rotationOnlyIcon = document.getElementById("rotationOnly");
-  rotationOnlyIcon.onclick = () => {};
+  const toolsDiv = document.getElementById("tools");
+  iconControls.forEach(({ title, id, link, onClick, icon, target }) => {
+    const i = document.createElement("i");
+    i.className = "material-icons";
+    const a = document.createElement("a");
+    a.title = title;
+    a.id = id;
+    a.href = link;
+    target && (a.target = target);
+    a.innerText = icon;
+    a.onclick = onClick;
+    i.appendChild(a);
+    toolsDiv.appendChild(i);
+  });
+  // const googleFontLink = document.createElement("link");
+  // googleFontLink.rel = "stylesheet";
+  // googleFontLink.href =
+  //   "https://fonts.googleapis.com/icon?family=Material+Icons";
+  // googleFontLink.crossorigin = "anonymous";
+  // document.head.appendChild(googleFontLink);
 }
 
 function init() {
@@ -137,7 +210,22 @@ function init() {
     Vec2(canvas.width / 2, 25)
   );
 
-  if (window.DeviceMotionEvent != undefined && isMobile) {
+  readPermalinkIfExists();
+  setUpDeviceCallbacks();
+}
+
+function readPermalinkIfExists() {
+  const url = window.location.href;
+  const baseUrl = url.split(URL_CURVE);
+  if (baseUrl.length > 1) {
+    isViewOnly = true;
+    const serializedCurve = baseUrl[1];
+    curve = deserializeCurve(decodeURI(serializedCurve));
+  }
+}
+
+function setUpDeviceCallbacks() {
+  if (window.DeviceMotionEvent != undefined && isMobile && !isViewOnly) {
     addAccelerationCallback();
     addRotationCallback();
   }
@@ -146,12 +234,15 @@ function init() {
 function addRotationCallback() {
   window.addEventListener("deviceorientation", (e) => {
     const { alpha, beta, gamma } = e;
+
     const newTime = new Date().getTime();
     const timeInBetweenCallsInSec = (newTime - eulerCallbackTime) * 1e-3;
     eulerCallbackTime = newTime;
 
     const newEuler = Vec3(alpha, beta, gamma).scale(Math.PI / 180);
+
     eulerFifo.push(newEuler);
+
     // Angle interval here: https://w3c.github.io/deviceorientation/#deviceorientation
     const newEulerDual = newEuler.add(Vec3(2 * Math.PI, 2 * Math.PI, Math.PI));
     const dTheta = newEuler.sub(oldEulerFromCallback);
@@ -166,6 +257,7 @@ function addRotationCallback() {
     eulerSpeedFifo.push(eulerSpeed);
     // retrieve corrected newEuler
     oldEulerFromCallback = finalDTheta.add(oldEulerFromCallback);
+
     updateRotationDataUI(newEuler.toArray());
   });
 }
@@ -361,13 +453,14 @@ function updateDeviceRotation(dt) {
   // .sub(
   //   eulerSpeedCalibration
   // );
-  myDevice.euler = eulerFifo.getLast();
-  // myDevice.euler.add(myDevice.eulerSpeed.scale(dt));
+  myDevice.euler = myDevice.euler.add(myDevice.eulerSpeed.scale(dt));
 }
 
 function updateDevicePos(dt) {
-  let averageAcceleration = Vec3();
-  // averageVectorFifo(accelerationFifo).sub(accelerationCalibration);
+  let averageAcceleration = averageVectorFifo(accelerationFifo);
+  // .sub(
+  //   accelerationCalibration
+  // );
   let accelerationSpace = isMobile
     ? averageAcceleration
     : matrixProd(myDevice.basis, averageAcceleration);
@@ -378,6 +471,27 @@ function updateDevicePos(dt) {
   myDevice.pos = myDevice.pos
     .add(myDevice.vel.scale(dt))
     .add(accelerationSpace.scale(0.5 * dt * dt));
+}
+
+function drawCalibrationUI() {
+  if (isCalibrating && isMobile) {
+    const pos = calibrationLoadingUI.pos.toArray();
+    ctx.font = "15px";
+    ctx.fillStyle = "rgba(255, 255, 255, 255)";
+    ctx.fillText(
+      "Get your device in a stationary position for calibration",
+      pos[0] - 25,
+      pos[1] - 10
+    );
+  } else if (!isMobile) {
+    ctx.font = "15px serif";
+    ctx.fillStyle = "rgba(255, 255, 255, 255)";
+    ctx.fillText(
+      "This app uses a smart phone. Use A,W,S,D to control.",
+      canvas.width / 2 - 100,
+      canvas.height - 20
+    );
+  }
 }
 
 function drawAxis() {
@@ -508,6 +622,10 @@ function draw() {
 
   if (isCalibrating && isMobile) {
     calibration(dt);
+  } else if (isViewOnly) {
+    camera.orbit();
+    drawAxis();
+    drawCurve();
   } else {
     camera.orbit();
     updateCurve(dt);
@@ -521,25 +639,7 @@ function draw() {
   camera.sceneShot(scene).to(tela);
 
   // rapid fix for text
-  if (isCalibrating && isMobile) {
-    const pos = calibrationLoadingUI.pos.toArray();
-    ctx.font = "15px";
-    ctx.fillStyle = "rgba(255, 255, 255, 255)";
-    ctx.fillText(
-      "Get your device in a stationary position for calibration",
-      pos[0] - 25,
-      pos[1] - 10
-    );
-  } else if (!isMobile) {
-    ctx.font = "15px serif";
-    ctx.fillStyle = "rgba(255, 255, 255, 255)";
-    ctx.fillText(
-      "This app uses a smart phone. Use A,W,S,D to control.",
-      canvas.width / 2 - 100,
-      canvas.height - 20
-    );
-  }
-
+  drawCalibrationUI();
   requestAnimationFrame(draw);
 }
 
