@@ -45,6 +45,7 @@ let oldEulerFromCallback = Vec3();
 // calibration variables
 let accelerationCalibration = Vec3();
 let eulerSpeedCalibration = Vec3();
+let eulerCalibration = Vec3();
 let isCalibrating = true;
 let maxCalibrationTimeInSeconds = 7;
 let calibrationLoadingUI;
@@ -451,14 +452,14 @@ function updateDeviceRotation(dt) {
   // .sub(
   //   eulerSpeedCalibration
   // );
-  myDevice.euler = myDevice.euler.add(myDevice.eulerSpeed.scale(dt));
+  myDevice.euler = averageVectorFifo(eulerFifo).sub(eulerCalibration);
+  // myDevice.euler.add(myDevice.eulerSpeed.scale(dt));
 }
 
 function updateDevicePos(dt) {
-  let averageAcceleration = averageVectorFifo(accelerationFifo);
-  // .sub(
-  //   accelerationCalibration
-  // );
+  let averageAcceleration = averageVectorFifo(accelerationFifo).sub(
+    accelerationCalibration
+  );
   let accelerationSpace = isMobile
     ? averageAcceleration
     : matrixProd(myDevice.basis, averageAcceleration);
@@ -551,8 +552,10 @@ function calibration(dt) {
     isCalibrating = false;
     const averageAcceleration = averageVectorFifo(accelerationFifo);
     const averageSpeedEuler = averageVectorFifo(eulerSpeedFifo);
+    const averageEuler = averageVectorFifo(eulerFifo);
     accelerationCalibration = averageAcceleration;
     eulerSpeedCalibration = averageSpeedEuler;
+    eulerCalibration = averageEuler;
     return;
   }
 
