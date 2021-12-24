@@ -421,6 +421,7 @@ function updateDynamicsDesktop(dt) {
   // euler integration
   myDevice.eulerSpeed = myDevice.eulerSpeed.add(randomEulerAcc.scale(dt));
   eulerSpeedFifo.push(myDevice.eulerSpeed);
+  eulerFifo.push(myDevice.euler.add(myDevice.eulerSpeed.scale(dt)));
 
   updateRotationDataUI();
 }
@@ -610,8 +611,6 @@ function calibration(dt) {
     );
   }
 }
-
-
 
 function draw() {
   const dt = Math.min(0.75, 1e-3 * (new Date().getTime() - startTime));
