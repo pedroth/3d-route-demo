@@ -533,6 +533,7 @@ function drawDevice() {
     );
   }
 }
+
 function drawCurve() {
   const K = 500;
   const n = curve.length;
@@ -610,6 +611,8 @@ function calibration(dt) {
   }
 }
 
+
+
 function draw() {
   const dt = Math.min(0.75, 1e-3 * (new Date().getTime() - startTime));
   startTime = new Date().getTime();
@@ -639,7 +642,6 @@ function draw() {
 
   camera.sceneShot(scene).to(tela);
 
-  // rapid fix for text
   drawCalibrationUI();
   requestAnimationFrame(draw);
 }
