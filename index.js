@@ -419,9 +419,7 @@ function updateDynamicsDesktop(dt) {
   randomEulerAcc = randomEulerAcc.sub(myDevice.eulerSpeed);
 
   // euler integration
-  myDevice.eulerSpeed = myDevice.eulerSpeed.add(randomEulerAcc.scale(dt));
-  eulerSpeedFifo.push(myDevice.eulerSpeed);
-  eulerFifo.push(myDevice.euler.add(myDevice.eulerSpeed.scale(dt)));
+  eulerSpeedFifo.push(myDevice.eulerSpeed.add(randomEulerAcc.scale(dt)));
 
   updateRotationDataUI();
 }
@@ -449,12 +447,12 @@ function updateCurve(dt) {
 }
 
 function updateDeviceRotation(dt) {
-  myDevice.eulerSpeed = averageVectorFifo(eulerSpeedFifo);
-  // .sub(
-  //   eulerSpeedCalibration
-  // );
-  myDevice.euler = averageVectorFifo(eulerFifo).sub(eulerCalibration);
-  // myDevice.euler.add(myDevice.eulerSpeed.scale(dt));
+  if (isMobile) {
+    myDevice.euler = averageVectorFifo(eulerFifo).sub(eulerCalibration);
+  } else {
+    myDevice.eulerSpeed = averageVectorFifo(eulerSpeedFifo);
+    myDevice.euler = myDevice.euler.add(myDevice.eulerSpeed.scale(dt));
+  }
 }
 
 function updateDevicePos(dt) {
