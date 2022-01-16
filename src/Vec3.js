@@ -107,7 +107,7 @@ export default class Vec {
     return new Vec(ans, true);
   }
 
-  reduce(fold, init) {
+  reduce(fold, init = 0) {
     let acc = init;
     for (let i = 0; i < this._n; i++) {
       acc = fold(acc, this._vec[i], i);

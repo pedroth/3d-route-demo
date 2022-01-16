@@ -128,37 +128,15 @@ export default class Canvas {
   }
 
   drawLineIntClipped(x1, x2, rgb) {
-    x1 = x1.map(Math.floor);
-    x2 = x2.map(Math.floor);
-
-    const index = [-1, 0, 1];
-
-    const n = index.length;
-    const nn = n * n;
-
-    let x = x1.clone();
-
-    const tangent = x2.sub(x1);
-    const normal = Vec2(-tangent.get(1), tangent.get(0));
-
-    this.drawPxl(...x.toArray(), rgb);
-
-    while (!x.equals(x2)) {
-      let fmin = Number.MAX_VALUE;
-      let minDir = Vec2();
-      for (let k = 0; k < nn; k++) {
-        const i = Vec2(index[k % n], index[Math.floor((k % nn) / n)]);
-        const nextX = x.add(i);
-        const v = nextX.sub(x1);
-        const f = Math.abs(v.dot(normal)) - v.dot(tangent);
-        if (fmin > f) {
-          fmin = f;
-          minDir = i;
-        }
-      }
-
-      x = x.add(minDir);
-      this.drawPxl(...x.toArray(), rgb);
+    // faster than using vecs
+    const [p0, p1] = [x1, x2].map((x) => x.toArray());
+    const v =  [p1[0] - p0[0], p1[1] - p0[1]];
+    const n = Math.abs(v[0]) + Math.abs(v[1]);
+    for (let k = 0; k < n; k++) {
+      const s = k / n;
+      const x = [p0[0] + v[0] * s, p0[1] + v[1] * s].map(Math.floor);
+      const [i, j] = x;
+      this.drawPxl(i, j, rgb);
     }
     return this;
   }

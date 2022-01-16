@@ -471,7 +471,7 @@ function updateDevicePos(dt) {
     .add(accelerationSpace.scale(0.5 * dt * dt));
 }
 
-function drawCalibrationUI() {
+function drawCalibrationTextOrNotMobilePlaceHolder() {
   if (isCalibrating && isMobile) {
     const pos = calibrationLoadingUI.pos.toArray();
     ctx.font = "15px";
@@ -490,6 +490,16 @@ function drawCalibrationUI() {
       canvas.height - 20
     );
   }
+}
+
+function drawFPS(dt) {
+  ctx.font = "15px serif";
+  ctx.fillStyle = "rgba(255, 255, 255, 255)";
+  ctx.fillText(
+    `FPS: ${Math.floor(1 / dt).toFixed(2)}`,
+    25,
+    canvas.height - 20
+  );
 }
 
 function drawAxis() {
@@ -639,7 +649,11 @@ function draw() {
 
   camera.sceneShot(scene).to(tela);
 
-  drawCalibrationUI();
+  /**
+   * needs to be here because it is using canvas context
+   */
+  drawCalibrationTextOrNotMobilePlaceHolder();
+  drawFPS(dt);
   requestAnimationFrame(draw);
 }
 
