@@ -335,10 +335,10 @@ function touchMove(e) {
   camera.param = camera.param.add(
     Vec3(
       0,
-      ...Vec2(
+      ...[
         -2 * Math.PI * (dy / canvas.width),
-        2 * Math.PI * (dx / canvas.height)
-      ).toArray()
+        2 * Math.PI * (dx / canvas.height),
+      ]
     )
   );
   mouse = newMouse;
@@ -367,10 +367,10 @@ function mouseMove(e) {
   camera.param = camera.param.add(
     Vec3(
       0,
-      ...Vec2(
+      ...[
         -2 * Math.PI * (dy / canvas.width),
-        2 * Math.PI * (dx / canvas.height)
-      ).toArray()
+        2 * Math.PI * (dx / canvas.height),
+      ]
     )
   );
   mouse = newMouse;
@@ -495,11 +495,7 @@ function drawCalibrationTextOrNotMobilePlaceHolder() {
 function drawFPS(dt) {
   ctx.font = "15px serif";
   ctx.fillStyle = "rgba(255, 255, 255, 255)";
-  ctx.fillText(
-    `FPS: ${Math.floor(1 / dt).toFixed(2)}`,
-    25,
-    canvas.height - 20
-  );
+  ctx.fillText(`FPS: ${Math.floor(1 / dt).toFixed(2)}`, 25, canvas.height - 20);
 }
 
 function drawAxis() {
