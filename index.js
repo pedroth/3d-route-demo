@@ -190,17 +190,12 @@ function addIconControls() {
 
 function init() {
   addIconControls();
-  canvas.addEventListener("touchstart", touchStart, false);
-  canvas.addEventListener("touchend", touchEnd, false);
-  canvas.addEventListener("touchmove", touchMove, false);
-
-  canvas.addEventListener("mousedown", mouseDown, false);
-  canvas.addEventListener("mouseup", mouseUp, false);
-  canvas.addEventListener("mousemove", mouseMove, false);
-  canvas.addEventListener("wheel", mouseWheel, false);
+  tela.onMouseDown(mouseDown);
+  tela.onMouseMove(mouseMove);
+  tela.onMouseUp(mouseUp);
+  tela.onMouseWheel(mouseWheel);
 
   document.addEventListener("keydown", keyDown, false);
-
   window.addEventListener("resize", resize);
   resize();
 
@@ -312,42 +307,8 @@ function keyDown(e) {
   eulerSpeedFifo.push(eulerSpeed);
 }
 
-function touchStart(e) {
-  const { top, left } = canvas.getBoundingClientRect();
-  const { clientX, clientY } = e.touches[0];
-  mouse = Vec2(clientY, clientX).sub(Vec2(top, left));
-  down = true;
-}
-
-function touchEnd() {
-  down = false;
-}
-
-function touchMove(e) {
-  const { top, left } = canvas.getBoundingClientRect();
-  const { clientX, clientY } = e.touches[0];
-  const newMouse = Vec2(clientY, clientX).sub(Vec2(top, left));
-
-  if (!down || newMouse.equals(mouse)) {
-    return;
-  }
-  const [dx, dy] = newMouse.sub(mouse).toArray();
-  camera.param = camera.param.add(
-    Vec3(
-      0,
-      ...[
-        -2 * Math.PI * (dy / canvas.width),
-        2 * Math.PI * (dx / canvas.height),
-      ]
-    )
-  );
-  mouse = newMouse;
-}
-
-function mouseDown(e) {
-  const { top, left } = canvas.getBoundingClientRect();
-  const { clientX, clientY } = e;
-  mouse = Vec2(clientY, clientX).sub(Vec2(top, left));
+function mouseDown(mouseVec2) {
+  mouse = mouseVec2;
   down = true;
 }
 
@@ -355,11 +316,7 @@ function mouseUp() {
   down = false;
 }
 
-function mouseMove(e) {
-  const { top, left } = canvas.getBoundingClientRect();
-  const { clientX, clientY } = e;
-  const newMouse = Vec2(clientY, clientX).sub(Vec2(top, left));
-
+function mouseMove(newMouse) {
   if (!down || newMouse.equals(mouse)) {
     return;
   }

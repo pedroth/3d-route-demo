@@ -128,14 +128,12 @@ export default class Canvas {
   }
 
   drawLineIntClipped(x1, x2, rgb) {
-    // faster than using vecs
-    const [p0, p1] = [x1, x2].map((x) => x.toArray());
-    const v =  [p1[0] - p0[0], p1[1] - p0[1]];
-    const n = Math.abs(v[0]) + Math.abs(v[1]);
+    const v = x2.sub(x1);
+    const n = v.fold((e, x) => e + Math.abs(x), 0);
     for (let k = 0; k < n; k++) {
       const s = k / n;
-      const x = [p0[0] + v[0] * s, p0[1] + v[1] * s].map(Math.floor);
-      const [i, j] = x;
+      const x = x1.add(v.scale(s)).map(Math.floor);
+      const [i, j] = x.toArray();
       this.drawPxl(i, j, rgb);
     }
     return this;
@@ -231,6 +229,37 @@ export default class Canvas {
     return this;
   }
 
+  onMouseDown(mouseDownLambda) {
+    const lambda =
+      (isMouse = true) =>
+      (e) => {
+        const mouse = this._getMouseFromEvent(e, isMouse);
+        mouseDownLambda(mouse);
+      };
+    this.canvas.addEventListener("mousedown", lambda(), false);
+    this.canvas.addEventListener("touchstart", lambda(false), false);
+  }
+
+  onMouseMove(mouseMoveLambda) {
+    const lambda =
+      (isMouse = true) =>
+      (e) => {
+        const mouse = this._getMouseFromEvent(e, isMouse);
+        mouseMoveLambda(mouse);
+      };
+    this.canvas.addEventListener("mousemove", lambda(), false);
+    this.canvas.addEventListener("touchmove", lambda(false), false);
+  }
+
+  onMouseUp(mouseUpLambda) {
+    this.canvas.addEventListener("mouseup", mouseUpLambda, false);
+    this.canvas.addEventListener("touchend", mouseUpLambda, false);
+  }
+
+  onMouseWheel(mouseWheelLambda) {
+    this.canvas.addEventListener("wheel", mouseWheelLambda, false);
+  }
+
   /**
    * return solution to : [ u_0 , h] x = z_0
    *
@@ -266,5 +295,11 @@ export default class Canvas {
     const [z1, z2] = z.toArray();
     const aux = z1 / u1;
     return Vec2(aux, (-u2 * aux + z2) / w);
+  }
+
+  _getMouseFromEvent(e, isMouse = true) {
+    const { top, left } = this.canvas.getBoundingClientRect();
+    const { clientX, clientY } = isMouse ? e : e.touches[0];
+    return Vec2(clientY, clientX).sub(Vec2(top, left));
   }
 }
