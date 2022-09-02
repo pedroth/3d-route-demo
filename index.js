@@ -324,10 +324,8 @@ function mouseMove(newMouse) {
   camera.param = camera.param.add(
     Vec3(
       0,
-      ...[
-        -2 * Math.PI * (dy / canvas.width),
-        2 * Math.PI * (dx / canvas.height),
-      ]
+      -2 * Math.PI * (dy / canvas.width),
+      2 * Math.PI * (dx / canvas.height)
     )
   );
   mouse = newMouse;
