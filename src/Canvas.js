@@ -61,7 +61,7 @@ export default class Canvas {
    * @returns {Number}
    */
   getImageIndex(x, y) {
-    const { width } = canvas;
+    const { width } = this.canvas;
     return 4 * (width * x + y);
   }
 
@@ -72,7 +72,7 @@ export default class Canvas {
    * @returns {Vec2}
    */
   canvasTransformInt(x, y) {
-    const { width, height } = canvas;
+    const { width, height } = this.canvas;
     const [xmin, ymin] = this.min.toArray();
     const [xmax, ymax] = this.max.toArray();
     let xint = (-height / (ymax - ymin)) * (y - ymax);
@@ -87,7 +87,7 @@ export default class Canvas {
    * @returns {Vec2}
    */
   canvasTransform(x, y) {
-    const { width, height } = canvas;
+    const { width, height } = this.canvas;
     const [xmin, ymin] = this.min.toArray();
     const [xmax, ymax] = this.max.toArray();
     let xt = xmin + ((xmax - xmin) / width) * y;
