@@ -83,7 +83,7 @@ function intersectImagePlaneInCameraSpace(vertexOut, vertexIn, camera) {
   const v = vertexOut.sub(vertexIn);
   const alpha = (distanceToPlane - vertexOut.get(2)) / v.get(2);
   const p = vertexOut.add(v.scale(alpha));
-  return p.toArray();
+  return p;
 }
 
 function drawLine(line, camera, canvas) {
@@ -93,14 +93,15 @@ function drawLine(line, camera, canvas) {
   const cameraLine = [line.start, line.end];
   const start = line.start.sub(camera.eye);
   const end = line.end.sub(camera.eye);
-  cameraLine[0] = matrixTransposeProd(camera.basis, start).toArray();
-  cameraLine[1] = matrixTransposeProd(camera.basis, end).toArray();
+  cameraLine[0] = matrixTransposeProd(camera.basis, start);
+  cameraLine[1] = matrixTransposeProd(camera.basis, end);
 
   //frustum culling
   let inFrustum = [];
   let outFrustum = [];
   for (let i = 0; i < cameraLine.length; i++) {
-    if (cameraLine[i][2] < distanceToPlane) {
+    const zCoord = cameraLine[i].get(2);
+    if (zCoord < distanceToPlane) {
       outFrustum.push(i);
     } else {
       inFrustum.push(i);
@@ -113,8 +114,8 @@ function drawLine(line, camera, canvas) {
     const inVertex = inFrustum[0];
     const outVertex = outFrustum[0];
     const inter = intersectImagePlaneInCameraSpace(
-      Vec3(...cameraLine[outVertex]),
-      Vec3(...cameraLine[inVertex]),
+      cameraLine[outVertex],
+      cameraLine[inVertex],
       camera
     );
     cameraLine[outVertex] = inter;
@@ -122,14 +123,10 @@ function drawLine(line, camera, canvas) {
 
   //project
   for (let i = 0; i < cameraLine.length; i++) {
-    cameraLine[i][0] = (cameraLine[i][0] * distanceToPlane) / cameraLine[i][2];
-    cameraLine[i][1] = (cameraLine[i][1] * distanceToPlane) / cameraLine[i][2];
+    const zCoord = cameraLine[i].get(2);
+    cameraLine[i] = cameraLine[i].scale(distanceToPlane).scale(1 / zCoord);
   }
-  canvas.drawLine(
-    Vec2(cameraLine[0][0], cameraLine[0][1]),
-    Vec2(cameraLine[1][0], cameraLine[1][1]),
-    rgb
-  );
+  canvas.drawLine(cameraLine[0].take(0, 2), cameraLine[1].take(0, 2), rgb);
 }
 
 function drawPath(path, camera, canvas) {
