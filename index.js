@@ -431,9 +431,10 @@ function drawCalibrationTextOrNotMobilePlaceHolder() {
     const pos = calibrationLoadingUI.pos.toArray();
     ctx.font = "15px";
     ctx.fillStyle = "rgba(255, 255, 255, 255)";
+    const isVertical = canvas.width < canvas.height; 
     ctx.fillText(
       "Get your device in a stationary position for calibration",
-      pos[0] - 25,
+      pos[0] + (isVertical ? -(canvas.width / 6) : -(canvas.width / 20) + 35),
       pos[1] - 10
     );
   } else if (!isMobile) {
