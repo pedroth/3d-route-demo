@@ -127,7 +127,7 @@ function addIconControls() {
       id: "githubIcon",
       link: "https://github.com/pedroth/3d-route-demo",
       target: "_blank",
-      onClick: () => {},
+      onClick: () => { },
       icon: "code",
     },
     {
@@ -194,6 +194,9 @@ function init() {
   tela.onMouseMove(mouseMove);
   tela.onMouseUp(mouseUp);
   tela.onMouseWheel(mouseWheel);
+  tela.lockScreen();
+
+  toggleFullScreen();
 
   document.addEventListener("keydown", keyDown, false);
   window.addEventListener("resize", resize);
@@ -223,6 +226,28 @@ function setUpDeviceCallbacks() {
     addAccelerationCallback();
     addRotationCallback();
   }
+}
+
+function toggleFullScreen() {
+  const elem = document.body;
+  elem.addEventListener("click", () => {
+    if (
+      !document.fullscreenElement &&    // alternative standard method
+      !document.mozFullScreenElement &&
+      !document.webkitFullscreenElement &&
+      !document.msFullscreenElement
+    ) {  // current working methods
+      if (elem.requestFullscreen) {
+        elem.requestFullscreen();
+      } else if (elem.msRequestFullscreen) {
+        elem.msRequestFullscreen();
+      } else if (elem.mozRequestFullScreen) {
+        elem.mozRequestFullScreen();
+      } else if (elem.webkitRequestFullscreen) {
+        elem.webkitRequestFullscreen(Element.ALLOW_KEYBOARD_INPUT);
+      }
+    }
+  })
 }
 
 function addRotationCallback() {
@@ -431,17 +456,18 @@ function drawCalibrationTextOrNotMobilePlaceHolder() {
     const pos = calibrationLoadingUI.pos.toArray();
     ctx.font = "15px";
     ctx.fillStyle = "rgba(255, 255, 255, 255)";
-    const isVertical = canvas.width < canvas.height; 
+    const isVertical = canvas.width < canvas.height;
+    ctx.font = "bold 0.81rem sans-serif";
     ctx.fillText(
-      "Get your device in a stationary position for calibration",
-      pos[0] + (isVertical ? -(canvas.width / 6) : -(canvas.width / 20) + 35),
+      "Put device in a stationary position for calibration",
+      pos[0] + (isVertical ? - 45 : -(canvas.width / 20) + 35),
       pos[1] - 10
     );
   } else if (!isMobile) {
     ctx.font = "15px serif";
     ctx.fillStyle = "rgba(255, 255, 255, 255)";
     ctx.fillText(
-      "This app uses a smart phone. Use A,W,S,D to control.",
+      "This app uses a smart phone. In desktop mode, use A,W,S,D to control.",
       canvas.width / 2 - 100,
       canvas.height - 20
     );

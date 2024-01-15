@@ -23,7 +23,7 @@ export default class Canvas {
    */
   constructor(canvas, min = Vec2(0, 0), max = Vec2(1, 1)) {
     this.canvas = canvas;
-    this.ctx = this.canvas.getContext("2d");
+    this.ctx = this.canvas.getContext("2d", { willReadFrequently: true });
     this.image = this.ctx.getImageData(
       0,
       0,
@@ -232,32 +232,48 @@ export default class Canvas {
   onMouseDown(mouseDownLambda) {
     const lambda =
       (isMouse = true) =>
-      (e) => {
-        const mouse = this._getMouseFromEvent(e, isMouse);
-        mouseDownLambda(mouse);
-      };
+        (e) => {
+          const mouse = this._getMouseFromEvent(e, isMouse);
+          mouseDownLambda(mouse);
+        };
     this.canvas.addEventListener("mousedown", lambda(), false);
     this.canvas.addEventListener("touchstart", lambda(false), false);
+    return this;
   }
 
   onMouseMove(mouseMoveLambda) {
     const lambda =
       (isMouse = true) =>
-      (e) => {
-        const mouse = this._getMouseFromEvent(e, isMouse);
-        mouseMoveLambda(mouse);
-      };
+        (e) => {
+          const mouse = this._getMouseFromEvent(e, isMouse);
+          mouseMoveLambda(mouse);
+        };
     this.canvas.addEventListener("mousemove", lambda(), false);
     this.canvas.addEventListener("touchmove", lambda(false), false);
+    return this;
   }
 
   onMouseUp(mouseUpLambda) {
     this.canvas.addEventListener("mouseup", mouseUpLambda, false);
     this.canvas.addEventListener("touchend", mouseUpLambda, false);
+    return this;
   }
 
   onMouseWheel(mouseWheelLambda) {
     this.canvas.addEventListener("wheel", mouseWheelLambda, false);
+    return this;
+  }
+
+
+  lockScreen() {
+    this.canvas.addEventListener("click", async () => {
+      try {
+        await navigator.wakeLock.request('screen');
+      } catch (e) {
+        console.log("caught error", e);
+      }
+    })
+    return this;
   }
 
   /**
