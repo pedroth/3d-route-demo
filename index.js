@@ -85,7 +85,7 @@ const linesIndexs = [
   [6, 7],
 ];
 
-const URL_CURVE = "?curve=";
+const URL_CURVE = "#curve=";
 
 /**
  * Main program
@@ -116,7 +116,8 @@ function generatePermalink() {
   const url = window.location.href;
   const baseUrl = url.split(URL_CURVE)[0];
   window.location.href = `${baseUrl}${URL_CURVE}${encodeURI(
-    serializeCurve(curve.filter((_, i) => i % alpha === 0))
+    // serializeCurve(curve.filter((_, i) => i % alpha === 0))
+    serializeCurve(curve)
   )}`;
 }
 
@@ -251,49 +252,101 @@ function toggleFullScreen() {
 }
 
 function addRotationCallback() {
-  window.addEventListener("deviceorientation", (e) => {
-    const { alpha, beta, gamma } = e;
-
-    const newTime = new Date().getTime();
-    const timeInBetweenCallsInSec = (newTime - eulerCallbackTime) * 1e-3;
-    eulerCallbackTime = newTime;
-
-    const newEuler = Vec3(alpha, beta, gamma).scale(Math.PI / 180);
-
-    eulerFifo.push(newEuler);
-
-    // Angle interval here: https://w3c.github.io/deviceorientation/#deviceorientation
-    const newEulerDual = newEuler.add(Vec3(2 * Math.PI, 2 * Math.PI, Math.PI));
-    const dTheta = newEuler.sub(oldEulerFromCallback);
-    const dThetaDual = newEulerDual.sub(oldEulerFromCallback);
-    const finalDTheta = dTheta.op(dThetaDual, (a, b) =>
-      Math.abs(a) <= Math.abs(b) ? a : b
-    );
-
-    const eulerSpeed = finalDTheta.scale(
-      1 / (timeInBetweenCallsInSec === 0 ? 1e-1 : timeInBetweenCallsInSec)
-    );
-    eulerSpeedFifo.push(eulerSpeed);
-    // retrieve corrected newEuler
-    oldEulerFromCallback = finalDTheta.add(oldEulerFromCallback);
-
-    updateRotationDataUI(newEuler.toArray());
-  });
+  // Check if permission is required (Chrome, iOS 13+)
+  if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+    // Request permission for accessing device orientation data
+    DeviceOrientationEvent.requestPermission()
+      .then(permissionState => {
+        if (permissionState === 'granted') {
+          // Permission granted, add the deviceorientation event listener
+          window.addEventListener("deviceorientation", handleDeviceOrientationEvent, true);
+        } else {
+          console.log("Permission denied for deviceorientation event.");
+        }
+      })
+      .catch(error => {
+        console.error("Error requesting deviceorientation permission:", error);
+      });
+  } else {
+    // No permission needed, add the deviceorientation event listener directly
+    window.addEventListener("deviceorientation", handleDeviceOrientationEvent, true);
+  }
 }
+
+// Handler function to process the deviceorientation event
+function handleDeviceOrientationEvent(e) {
+  const { alpha, beta, gamma } = e;
+
+  const newTime = new Date().getTime();
+  const timeInBetweenCallsInSec = (newTime - eulerCallbackTime) * 1e-3;
+  eulerCallbackTime = newTime;
+
+  const newEuler = Vec3(alpha, beta, gamma).scale(Math.PI / 180);
+  eulerFifo.push(newEuler);
+
+  // Angle interval here: https://w3c.github.io/deviceorientation/#deviceorientation
+  const dTheta = newEuler.sub(oldEulerFromCallback);
+  console.log("$$$", dTheta.toString())
+  // correct angle discontinuity
+  const finalDTheta = dTheta.map(x => x - 2 * Math.PI * Math.round(x / (2 * Math.PI)));
+  console.log(">>>>", finalDTheta.toString())
+
+  // Calculate the Euler speed (angular velocity)
+  const eulerSpeed = finalDTheta.scale(
+    1 / (timeInBetweenCallsInSec === 0 ? 1e-1 : timeInBetweenCallsInSec)
+  );
+  eulerSpeedFifo.push(eulerSpeed);
+
+  // Update old Euler angle based on the final difference
+  oldEulerFromCallback = finalDTheta.add(oldEulerFromCallback);
+
+  // Update UI with the new Euler angles
+  updateRotationDataUI(newEuler.toArray());
+}
+
 
 function addAccelerationCallback() {
-  window.addEventListener(
-    "devicemotion",
-    (e) => {
-      accelerationFifo.push(
-        Vec3(-e.acceleration.y, -e.acceleration.x, -e.acceleration.z)
-      );
-      const lastAcceleration = accelerationFifo.getLast();
-      updateAccelerationDataUI(lastAcceleration.toArray());
-    },
-    true
-  );
+  // Check if permission is required (Chrome, iOS 13+)
+  if (typeof DeviceMotionEvent.requestPermission === 'function') {
+    // Request permission for accessing device motion data
+    DeviceMotionEvent.requestPermission()
+      .then(permissionState => {
+        if (permissionState === 'granted') {
+          // Permission granted, add the devicemotion event listener
+          window.addEventListener(
+            "devicemotion",
+            handleDeviceMotionEvent,
+            true
+          );
+        } else {
+          console.log("Permission denied for devicemotion event.");
+        }
+      })
+      .catch(error => {
+        console.error("Error requesting devicemotion permission:", error);
+      });
+  } else {
+    // No permission needed, add the devicemotion event listener directly
+    window.addEventListener(
+      "devicemotion",
+      handleDeviceMotionEvent,
+      true
+    );
+  }
 }
+
+// Handler function to process the devicemotion event
+function handleDeviceMotionEvent(e) {
+  // Push acceleration data to FIFO, adjusting axes as needed
+  accelerationFifo.push(
+    Vec3(-e.acceleration.y, -e.acceleration.x, -e.acceleration.z)
+  );
+
+  // Get the latest acceleration data and update the UI
+  const lastAcceleration = accelerationFifo.getLast();
+  updateAccelerationDataUI(lastAcceleration.toArray());
+}
+
 
 function updateAccelerationDataUI(accelerationArray) {
   document.getElementById("accelerationData").innerHTML = `(${accelerationArray
