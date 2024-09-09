@@ -72,7 +72,7 @@ export default class Vec {
   }
 
   serialize() {
-    return this._vec.join(", ");
+    return this._vec.join(",");
   }
 
   add(u) {

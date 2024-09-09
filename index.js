@@ -115,10 +115,10 @@ function generatePermalink() {
   const alpha = Math.ceil((curve.length * VEC3_SERIAL_STR_SIZE) / MAX_URL_SIZE);
   const url = window.location.href;
   const baseUrl = url.split(URL_CURVE)[0];
-  window.location.href = `${baseUrl}${URL_CURVE}${encodeURI(
+  window.open(`${baseUrl}${URL_CURVE}${encodeURI(
     // serializeCurve(curve.filter((_, i) => i % alpha === 0))
     serializeCurve(curve)
-  )}`;
+  )}`, "_blank");
 }
 
 function addIconControls() {
@@ -286,10 +286,8 @@ function handleDeviceOrientationEvent(e) {
 
   // Angle interval here: https://w3c.github.io/deviceorientation/#deviceorientation
   const dTheta = newEuler.sub(oldEulerFromCallback);
-  console.log("$$$", dTheta.toString())
   // correct angle discontinuity
   const finalDTheta = dTheta.map(x => x - 2 * Math.PI * Math.round(x / (2 * Math.PI)));
-  console.log(">>>>", finalDTheta.toString())
 
   // Calculate the Euler speed (angular velocity)
   const eulerSpeed = finalDTheta.scale(
@@ -575,7 +573,7 @@ function drawDevice() {
 }
 
 function drawCurve() {
-  const K = 500;
+  const K = 10000;
   const n = curve.length;
   scene.addElement(
     Scene.Path.builder()

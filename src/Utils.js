@@ -117,7 +117,7 @@ export function serializeCurve(path) {
  */
 export function deserializeCurve(serializedPath) {
   return serializedPath.split("|").map((v) => {
-    const [x, y, z] = v.split(", ").map((s) => Number.parseFloat(s));
+    const [x, y, z] = v.split(",").map((s) => Number.parseFloat(s));
     return Vec3(x, y, z);
   });
 }
